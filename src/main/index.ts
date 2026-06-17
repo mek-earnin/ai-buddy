@@ -458,10 +458,14 @@ app.whenReady().then(() => {
     }
   }
 
-  // Surface the macOS Accessibility prompt early so keystroke simulation works.
+  // Check Accessibility status WITHOUT forcing the system prompt. Passing `true`
+  // here re-pops the OS dialog on every launch when macOS sees the app as
+  // untrusted (common for unsigned/translocated builds). We instead guide the
+  // user only when text capture actually fails (warnAutomationOnce) and via the
+  // tray's Permissions Help.
   if (isMac) {
     try {
-      const trusted = systemPreferences.isTrustedAccessibilityClient(true);
+      const trusted = systemPreferences.isTrustedAccessibilityClient(false);
       log(`Accessibility trusted: ${trusted}`);
     } catch (err) {
       log(`Accessibility check failed: ${String(err)}`);
