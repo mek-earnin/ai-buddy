@@ -1,0 +1,43 @@
+{
+  "name": "ai-buddy",
+  "version": "1.0.0",
+  "description": "Developer productivity tray app — text rephrase, call handoff generation, standup notes, and more",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "webpack --config webpack.config.js",
+    "start": "npm run build && electron dist/main.js",
+    "dev": "webpack --config webpack.config.js --watch",
+    "dist": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "developer",
+    "productivity",
+    "ai",
+    "electron",
+    "aibuddy"
+  ],
+  "author": "Kamol Hasan",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
+    "openai": "^6.42.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "css-loader": "^7.1.4",
+    "html-webpack-plugin": "^5.6.7",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.6.0",
+    "typescript": "^6.0.3",
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.3",
+    "webpack-dev-server": "^5.2.5"
+  }
+}

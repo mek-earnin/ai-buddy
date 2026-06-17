@@ -1,0 +1,14 @@
+appId: com.hackathon.aibuddy
+productName: AIBuddy
+directories:
+  output: release
+files:
+  - dist/**/*
+  - assets/**/*
+mac:
+  category: public.app-category.productivity
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage
