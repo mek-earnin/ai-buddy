@@ -11,6 +11,10 @@ permissions:
 jobs:
   build:
     strategy:
+      # Run one OS at a time so the first job creates the GitHub Release and the
+      # second appends its assets to it. Parallel jobs race and create duplicate
+      # draft releases with split assets.
+      max-parallel: 1
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
