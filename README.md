@@ -79,8 +79,12 @@ On first launch, click the tray icon → Settings to configure:
 
 ### macOS Permissions
 
-The app needs **Accessibility** permission to simulate copy/paste keystrokes.
-Go to: System Settings → Privacy & Security → Accessibility → Enable "AIBuddy"
+AIBuddy needs **two** macOS permissions to read your selection and paste results:
+
+1. **Accessibility** — System Settings → Privacy & Security → Accessibility → enable "AIBuddy".
+2. **Automation** — System Settings → Privacy & Security → Automation → AIBuddy → enable "System Events".
+
+Granting Accessibility alone is not enough; without Automation, macOS silently blocks the copy/paste and the palette will open with no selected text. After changing either permission, fully quit and reopen AIBuddy. You can re-open these panes anytime from the tray icon → **Permissions Help**.
 
 ## Development
 
@@ -119,14 +123,17 @@ The workflow builds on `macos-latest` and `windows-latest` and uploads the `.dmg
 
 ## Troubleshooting
 
-- **macOS: "Apple could not verify…" or app won't open** — the app isn't notarized. Open System Settings → Privacy & Security, click **Open Anyway** next to the AIBuddy message (or right-click the app → **Open**).
+- **macOS: "Apple could not verify…" or app won't open** — the app isn't notarized (see note below). Open System Settings → Privacy & Security, click **Open Anyway** next to the AIBuddy message (or right-click the app → **Open**).
 - **macOS: "AIBuddy is damaged and can't be opened"** — clear the quarantine flag once: `xattr -cr /Applications/AIBuddy.app`, then open it.
 - **Windows: "Windows protected your PC" (SmartScreen)** — click **More info** then **Run anyway**.
 - **No window appears on launch** — that's expected. AIBuddy lives in the menu bar / system tray; click its icon, or press `Option+Space` (`Alt+Space` on Windows/Linux).
-- **Shortcut does nothing / nothing gets captured (macOS)** — grant **Accessibility** permission (see above). You may also be prompted to allow control of "System Events" under Automation.
+- **macOS: `Option+Space` opens the palette but no text is captured** — you're missing the **Automation** permission. Enable AIBuddy under System Settings → Privacy & Security → Automation → System Events (and Accessibility), then restart AIBuddy. The tray → **Permissions Help** menu opens these panes for you.
+- **macOS: pressing the shortcut still does nothing** — first confirm the app is running (menu-bar icon). Try the tray → **Show AIBuddy** menu item: if that also does nothing, check tray → **Open Logs** for the cause. If only the shortcut fails, it's likely a conflict — pick a different one in Settings.
 - **"Failed to register shortcut"** — another app is using `Option/Alt+Space`. Pick a different shortcut in Settings.
 - **Actions error out or return nothing** — make sure you've set a valid API key and model in Settings. Standup/Handoff also need your JIRA and GitHub credentials.
 - **Linux: API keys not saved securely** — without a system keyring, keys are stored unencrypted. Install a keyring (e.g. GNOME Keyring) for encrypted storage.
+
+> **Note on the "unverified developer" / malware warning:** AIBuddy is currently distributed without Apple notarization (no paid Apple Developer ID), so macOS shows this warning and permissions can be less reliable for unsigned apps. The permanent fix is to sign with a Developer ID Application certificate and notarize the build — planned for when an Apple Developer account is available.
 
 ## License
 

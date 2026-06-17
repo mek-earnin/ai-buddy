@@ -11,6 +11,8 @@ publish:
   repo: ai-buddy
 mac:
   category: public.app-category.productivity
+  extendInfo:
+    NSAppleEventsUsageDescription: AIBuddy uses Apple Events to copy your selected text and paste results back.
   target:
     - target: dmg
       arch: [universal]
