@@ -21,25 +21,30 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
-
-      - name: Build installers
-        run: npx electron-builder --publish never
+      - name: Build Tauri app
+        run: npm run tauri:build
 
       - name: Upload installers
         uses: actions/upload-artifact@v7
         with:
           name: installers-macos
           path: |
-            release/*.dmg
-            release/*.zip
-            release/*.blockmap
-            release/*.yml
-          if-no-files-found: ignore
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: error
 
   release:
     needs: build
