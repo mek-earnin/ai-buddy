@@ -4,6 +4,6 @@
 <dict>
   <key>LSUIElement</key><true/>
   <key>NSAppleEventsUsageDescription</key>
-  <string>AIBuddy uses Apple Events to copy your selected text and paste results back.</string>
+  <string>AI Buddy uses Apple Events to copy your selected text and paste results back.</string>
 </dict>
 </plist>

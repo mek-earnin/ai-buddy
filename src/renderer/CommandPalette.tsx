@@ -509,7 +509,7 @@ export default function CommandPalette({
     <div className="surface">
       <div className="topbar drag" data-tauri-drag-region>
         <span className="brand">
-          <span className="brand-dot" /> AIBuddy
+          <span className="brand-dot" /> AI Buddy
         </span>
         <span className="topbar-spacer" />
         <button className="icon-btn no-drag" onClick={onOpenSettings} title="Settings" aria-label="Settings">

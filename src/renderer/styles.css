@@ -1,24 +1,28 @@
 :root {
-  --bg: #0e0f13;
-  --surface: rgba(22, 23, 30, 0.88);
-  --surface-2: rgba(255, 255, 255, 0.035);
-  --surface-3: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.08);
+  /* Neutral macOS-native dark palette (no blue tint). The surface is kept
+     fairly translucent so the window vibrancy/blur reads through, like the
+     native command palettes it mimics. */
+  --bg: #1c1c1e;
+  --surface: rgba(30, 30, 32, 0.72);
+  --surface-2: rgba(255, 255, 255, 0.04);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
 
-  --text: #ececef;
-  --text-dim: #a2a5b0;
-  --text-faint: #6b6e7a;
+  --text: #f5f5f7;
+  --text-dim: #a8a8ad;
+  --text-faint: #6e6e73;
 
-  --accent: #818cf8;
-  --accent-strong: #6366f1;
-  --accent-soft: rgba(129, 140, 248, 0.14);
-  --accent-line: rgba(129, 140, 248, 0.55);
+  /* macOS system blue (dark appearance). */
+  --accent: #0a84ff;
+  --accent-strong: #0060df;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --accent-line: rgba(10, 132, 255, 0.55);
 
   --danger: #f2728c;
   --ok: #5bd08a;
 
-  --radius: 14px;
+  --radius: 28px;
   --radius-sm: 9px;
   --radius-xs: 6px;
 
@@ -62,9 +66,10 @@ button {
   background: var(--surface);
   backdrop-filter: blur(30px) saturate(160%);
   -webkit-backdrop-filter: blur(30px) saturate(160%);
-  border: 1px solid var(--border);
+  /* Edge hairline + corner rounding are drawn natively on the window layer
+     (see round_window_corners in lib.rs) for an even, native macOS edge. */
+  border: none;
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 
@@ -77,7 +82,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 12px 11px 14px;
+  padding: 12px 14px 10px 16px;
 }
 
 /* The top bar acts as the drag handle via `data-tauri-drag-region`. The
@@ -145,8 +150,8 @@ button {
 .search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 16px 12px;
+  gap: 12px;
+  padding: 6px 18px 14px;
   color: var(--text-faint);
 }
 
@@ -166,8 +171,8 @@ button {
 
 /* ---------- Context (selection / input) ---------- */
 .context {
-  margin: 0 12px 8px;
-  padding: 9px 11px;
+  margin: 0 14px 10px;
+  padding: 11px 13px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -237,11 +242,11 @@ button {
 .cmd-list {
   flex: 1;
   overflow-y: auto;
-  padding: 2px 8px 8px;
+  padding: 6px 10px 10px;
 }
 
 .cmd-group {
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 
 .cmd-group-label {
@@ -250,16 +255,16 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--text-faint);
-  padding: 8px 8px 4px;
+  padding: 12px 8px 6px;
 }
 
 .cmd-row {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 11px 12px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -269,25 +274,14 @@ button {
 }
 
 .cmd-row.active {
-  background: var(--accent-soft);
-}
-
-.cmd-row.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--accent);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .cmd-icon {
   flex-shrink: 0;
-  width: 22px;
+  width: 24px;
   text-align: center;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .cmd-text {
@@ -314,7 +308,7 @@ button {
 .cmd-desc {
   font-size: 11.5px;
   line-height: 1.35;
-  color: var(--text-faint);
+  color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -362,7 +356,7 @@ button {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 9px 14px;
+  padding: 10px 16px;
   border-top: 1px solid var(--border);
 }
 
@@ -505,7 +499,7 @@ kbd {
 }
 
 .btn-primary:hover {
-  background: #5457e8;
+  background: var(--accent);
 }
 
 .btn-ghost {
@@ -615,7 +609,7 @@ kbd {
 .settings-content {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 16px 18px;
+  padding: 6px 18px 24px;
 }
 
 .section-label {
@@ -624,7 +618,7 @@ kbd {
   letter-spacing: 0.07em;
   color: var(--text-faint);
   font-weight: 600;
-  margin: 14px 0 8px;
+  margin: 22px 0 10px;
 }
 
 .section-label.collapsible {
@@ -638,15 +632,15 @@ kbd {
 }
 
 .form-group {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .form-group label {
   display: block;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-dim);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .form-group input,
@@ -655,7 +649,7 @@ kbd {
 .key-input,
 .model-input {
   width: 100%;
-  padding: 9px 11px;
+  padding: 10px 12px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -685,7 +679,7 @@ kbd {
   display: block;
   font-size: 11px;
   color: var(--text-faint);
-  margin-top: 5px;
+  margin-top: 7px;
 }
 
 .form-actions {
@@ -1030,7 +1024,8 @@ kbd {
 
 .prompt-textarea {
   resize: vertical;
-  min-height: 60px;
+  min-height: 72px;
+  line-height: 1.5;
 }
 
 /* ---------- Scrollbar ---------- */

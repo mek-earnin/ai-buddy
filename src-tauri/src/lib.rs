@@ -23,6 +23,54 @@ struct SelectedTextPayload {
 
 const WIN_W: f64 = 480.0;
 const WIN_H: f64 = 600.0;
+/// Native window corner radius (matches the CSS `--radius`).
+const WINDOW_RADIUS: f64 = 28.0;
+/// Native hairline border width (points).
+const WINDOW_BORDER_WIDTH: f64 = 1.0;
+/// Native hairline border color (white @ low alpha) — subtle macOS-style edge.
+const WINDOW_BORDER_RGBA: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.16);
+
+/// Clip the window's content view layer to a rounded rect so the actual macOS
+/// window (webview + vibrancy together) has clean native rounded corners.
+#[cfg(target_os = "macos")]
+fn round_window_corners(window: &tauri::WebviewWindow, radius: f64) {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    let ns_window = ns_window as *mut AnyObject;
+    if ns_window.is_null() {
+        return;
+    }
+
+    unsafe {
+        let content_view: *mut AnyObject = msg_send![ns_window, contentView];
+        if content_view.is_null() {
+            return;
+        }
+        let _: () = msg_send![content_view, setWantsLayer: true];
+        let layer: *mut AnyObject = msg_send![content_view, layer];
+        if layer.is_null() {
+            return;
+        }
+        let _: () = msg_send![layer, setCornerRadius: radius];
+        let _: () = msg_send![layer, setMasksToBounds: true];
+
+        // Draw the hairline border on the SAME layer as the mask, so the stroke
+        // and the rounded corner share one geometry — gives an even, native edge
+        // (CSS borders are clipped unevenly at the corners by the layer mask).
+        use core_foundation::base::TCFType;
+        let (r, g, b, a) = WINDOW_BORDER_RGBA;
+        let border_color = core_graphics::color::CGColor::rgb(r, g, b, a);
+        let _: () = msg_send![layer, setBorderWidth: WINDOW_BORDER_WIDTH];
+        let _: () = msg_send![
+            layer,
+            setBorderColor: border_color.as_concrete_TypeRef() as *mut std::ffi::c_void
+        ];
+    }
+}
 
 /// Read the global cursor position (logical points, top-left origin).
 fn cursor_location() -> Option<(f64, f64)> {
@@ -48,13 +96,12 @@ fn monitor_logical_bounds(monitor: &tauri::Monitor) -> (f64, f64, f64, f64) {
     )
 }
 
-/// Position the palette window near the cursor, clamped to the monitor the
-/// cursor is currently on (not the one the window was last shown on).
-fn position_window(window: &tauri::WebviewWindow) {
-    let (cx, cy) = match cursor_location() {
-        Some(p) => p,
-        None => return,
-    };
+/// Compute the palette window's target position near the cursor, clamped to
+/// the monitor the cursor is currently on (not the one the window was last
+/// shown on). Returns logical (x, y) points, or `None` if the cursor can't be
+/// read.
+fn compute_window_position(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    let (cx, cy) = cursor_location()?;
 
     let mut x = cx - WIN_W / 2.0;
     let mut y = cy + 10.0;
@@ -77,27 +124,46 @@ fn position_window(window: &tauri::WebviewWindow) {
         y = y.clamp(mon_y, max_y);
     }
 
-    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    Some((x, y))
 }
 
-/// Capture the current selection + frontmost target, position and show the
-/// palette window, and emit the selected text to the webview.
+/// Capture the current selection + frontmost target, then position, show and
+/// focus the palette window.
+///
+/// Ordering matters: `selection::capture` must fully complete before we focus
+/// our own window. It fires Cmd+C at the source app and waits for the copy to
+/// land; if we stole focus first, the copy would never reach the source app
+/// (empty selection) and the focus hand-off would race (breaking keyboard
+/// input like Esc). The capture is fast in the common case — it breaks as soon
+/// as the copy lands — so this still feels snappy.
 pub fn show_tool_palette(app: &AppHandle) {
-    let (prev_app, editable) = selection::detect_frontmost_target();
+    let capture = selection::capture(app);
 
     if let Some(state) = app.try_state::<PrevApp>() {
         if let Ok(mut guard) = state.0.lock() {
-            *guard = prev_app.clone();
+            *guard = capture.prev_app;
         }
     }
 
-    let text = selection::capture_selection(app);
-
     if let Some(window) = app.get_webview_window("main") {
-        position_window(&window);
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = window.emit("selected-text", SelectedTextPayload { text, editable });
+        // Compute the position before hopping to the main thread (cursor +
+        // monitor reads are thread-safe), then set position, show and focus in
+        // a single main-thread turn. Doing these as separate hops off the
+        // shortcut thread lets the window paint at its old position for a frame
+        // before the move lands, which looks like the window "warping" into
+        // place. Batching them avoids that.
+        let position = compute_window_position(&window);
+        let win = window.clone();
+        let text = capture.text;
+        let editable = capture.editable;
+        let _ = window.run_on_main_thread(move || {
+            if let Some((x, y)) = position {
+                let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+            }
+            let _ = win.show();
+            let _ = win.set_focus();
+            let _ = win.emit("selected-text", SelectedTextPayload { text, editable });
+        });
     }
 }
 
@@ -168,12 +234,22 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                    // Round the native vibrancy layer so the actual window has
+                    // rounded corners (matches the CSS `--radius`). Without this
+                    // the blur view stays square and pokes out behind the UI.
                     let _ = apply_vibrancy(
                         &window,
                         NSVisualEffectMaterial::UnderWindowBackground,
                         None,
-                        None,
+                        Some(WINDOW_RADIUS),
                     );
+
+                    // Mask the window's content view to the same rounded rect.
+                    // The vibrancy radius alone only clips the blur view, leaving
+                    // a thin sliver of material peeking past the rounded UI in the
+                    // corners. Clipping the content view rounds the webview and the
+                    // vibrancy together for clean, native-looking corners.
+                    round_window_corners(&window, WINDOW_RADIUS);
                 }
 
                 // Keep the app alive in the tray when the window is closed.

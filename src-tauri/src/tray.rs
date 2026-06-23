@@ -11,7 +11,7 @@ const ACCESSIBILITY_PANE: &str =
 
 /// Build the menu-bar tray icon with its menu and event handler.
 pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show AIBuddy", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show AI Buddy", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
     let permissions =
@@ -34,7 +34,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     )?;
 
     let mut builder = TrayIconBuilder::new()
-        .tooltip("AIBuddy")
+        .tooltip("AI Buddy")
         .menu(&menu)
         .on_menu_event(|app, event| handle_menu_event(app, event.id.as_ref()));
 
@@ -62,11 +62,11 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
             let app_handle = app.clone();
             app.dialog()
                 .message(
-                    "AIBuddy needs two macOS permissions:\n\n\
+                    "AI Buddy needs two macOS permissions:\n\n\
                      • Accessibility — to read your selected text and paste results back.\n\
                      • Automation (System Events) — to send the Copy/Paste keystrokes.\n\n\
                      Click OK to open System Settings › Privacy & Security › Accessibility, \
-                     then enable AIBuddy.",
+                     then enable AI Buddy.",
                 )
                 .title("Permissions Help")
                 .show(move |_| {
