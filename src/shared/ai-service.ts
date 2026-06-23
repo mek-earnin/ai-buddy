@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { AIProvider } from './types';
+import { tauriFetch } from './http';
 
 export interface AIServiceConfig {
   provider: AIProvider;
@@ -58,6 +59,8 @@ async function streamWithOpenAI(
   const client = new OpenAI({
     apiKey: config.openaiApiKey,
     baseURL: 'https://api.openai.com/v1',
+    fetch: tauriFetch as any,
+    dangerouslyAllowBrowser: true,
   });
 
   const stream = await client.chat.completions.create({
@@ -96,7 +99,11 @@ async function streamWithAnthropic(
     throw new Error('Anthropic API key not configured. Add your key in Settings.');
   }
 
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const client = new Anthropic({
+    apiKey: config.anthropicApiKey,
+    fetch: tauriFetch as any,
+    dangerouslyAllowBrowser: true,
+  });
 
   const stream = await client.messages.create({
     model: config.anthropicModel,
@@ -132,6 +139,8 @@ async function generateWithOpenAI(
   const client = new OpenAI({
     apiKey: config.openaiApiKey,
     baseURL: 'https://api.openai.com/v1',
+    fetch: tauriFetch as any,
+    dangerouslyAllowBrowser: true,
   });
 
   const response = await client.chat.completions.create({
@@ -160,7 +169,11 @@ async function generateWithAnthropic(
     throw new Error('Anthropic API key not configured. Add your key in Settings.');
   }
 
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const client = new Anthropic({
+    apiKey: config.anthropicApiKey,
+    fetch: tauriFetch as any,
+    dangerouslyAllowBrowser: true,
+  });
 
   const response = await client.messages.create({
     model: config.anthropicModel,

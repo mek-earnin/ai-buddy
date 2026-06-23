@@ -1,3 +1,5 @@
+import { tauriFetch } from '../http';
+
 export interface GitHubComment {
   author: string;
   body: string;
@@ -29,7 +31,7 @@ export interface GitHubConfig {
 }
 
 async function githubFetchUrl(url: string, token: string): Promise<any> {
-  const response = await fetch(url, {
+  const response = await tauriFetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github.v3+json',

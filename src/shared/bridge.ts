@@ -2,7 +2,7 @@ import { AppSettings, GenerateRequest } from './types';
 import { JiraActivity } from './data-sources/jira';
 import { GitHubActivity } from './data-sources/github';
 
-export interface ElectronAPI {
+export interface AppBridge {
   getClipboardText: () => Promise<string>;
   generateText: (request: GenerateRequest) => Promise<string>;
   generateTextStream: (
@@ -20,6 +20,6 @@ export interface ElectronAPI {
 
 declare global {
   interface Window {
-    electronAPI: ElectronAPI;
+    aibuddy: AppBridge;
   }
 }

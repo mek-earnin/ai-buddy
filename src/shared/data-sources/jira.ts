@@ -43,6 +43,8 @@ function adfToText(node: any): string {
   return text;
 }
 
+import { tauriFetch } from '../http';
+
 export interface JiraConfig {
   baseUrl: string;
   email: string;
@@ -55,14 +57,14 @@ export async function fetchJiraActivity(config: JiraConfig): Promise<JiraActivit
   }
 
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
-  const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
+  const auth = btoa(`${config.email}:${config.apiToken}`);
 
   const jql = `assignee = currentUser() AND updated >= -7d ORDER BY updated DESC`;
   // Atlassian removed the legacy /rest/api/3/search endpoint (returns 410 Gone).
   // Use the enhanced JQL search endpoint instead. See CHANGE-2046.
   const url = `${baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=20&fields=summary,status,assignee,updated,comment`;
 
-  const response = await fetch(url, {
+  const response = await tauriFetch(url, {
     headers: {
       Authorization: `Basic ${auth}`,
       Accept: 'application/json',

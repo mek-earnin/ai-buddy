@@ -165,11 +165,11 @@ export default function CommandPalette({
           input: inputText,
           question: opts?.question,
           settings,
-          api: window.electronAPI,
+          api: window.aibuddy,
         });
 
         let started = false;
-        const generated = await window.electronAPI.generateTextStream(request, (delta) => {
+        const generated = await window.aibuddy.generateTextStream(request, (delta) => {
           if (!started) {
             started = true;
             setStreaming(true);
@@ -182,7 +182,7 @@ export default function CommandPalette({
         setStreaming(false);
         setView('result');
         if (settings.autoPaste && targetEditable && !action.disableAutoPaste && generated.trim()) {
-          window.electronAPI.pasteResult(generated);
+          window.aibuddy.pasteResult(generated);
         }
       } catch (err: any) {
         setStreaming(false);
@@ -194,7 +194,7 @@ export default function CommandPalette({
   );
 
   const handlePaste = useCallback(() => {
-    if (result) window.electronAPI.pasteResult(result);
+    if (result) window.aibuddy.pasteResult(result);
   }, [result]);
 
   const handleCopy = useCallback(async () => {

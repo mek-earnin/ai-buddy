@@ -2,47 +2,45 @@
   "name": "ai-buddy",
   "version": "1.0.2",
   "description": "Developer productivity tray app — text rephrase, call handoff generation, standup notes, and more",
-  "main": "dist/main.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kamolhasan/ai-buddy.git"
+    "url": "https://github.com/mek-earnin/ai-buddy.git"
   },
+  "type": "module",
   "scripts": {
-    "build": "webpack --config webpack.config.js",
-    "start": "npm run build && electron dist/main.js",
-    "dev": "webpack --config webpack.config.js --watch",
-    "dist": "npm run build && electron-builder",
-    "release": "npm run build && electron-builder --publish always"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build --target aarch64-apple-darwin"
   },
   "keywords": [
     "developer",
     "productivity",
     "ai",
-    "electron",
+    "tauri",
     "aibuddy"
   ],
-  "author": "Kamol Hasan",
   "license": "MIT",
-  "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-global-shortcut": "^2.3.2",
+    "@tauri-apps/plugin-http": "^2.5.9",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "openai": "^6.42.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@tauri-apps/cli": "^2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "css-loader": "^7.1.4",
-    "electron": "^42.4.0",
-    "electron-builder": "^26.15.3",
-    "html-webpack-plugin": "^5.6.7",
-    "style-loader": "^4.0.0",
-    "ts-loader": "^9.6.0",
+    "@vitejs/plugin-react": "^4",
     "typescript": "^6.0.3",
-    "webpack": "^5.107.2",
-    "webpack-cli": "^7.0.3",
-    "webpack-dev-server": "^5.2.5"
+    "vite": "^6"
   }
 }

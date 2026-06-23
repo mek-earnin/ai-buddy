@@ -71,7 +71,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   openaiModel: 'gpt-4o',
   anthropicModel: 'claude-sonnet-4-20250514',
-  globalShortcut: 'Alt+Space',
+  globalShortcut: 'Ctrl+Shift+Space',
   autoPaste: false,
   tonePrompts: {
     professional: '',

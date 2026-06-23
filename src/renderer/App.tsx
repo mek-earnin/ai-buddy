@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import CommandPalette from './CommandPalette';
 import Settings from './Settings';
 import { AppSettings } from '../shared/types';
-import '../shared/electron-api';
 
 type View = 'palette' | 'settings';
 
@@ -13,7 +12,7 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
-    window.electronAPI.getSettings().then(setSettings);
+    window.aibuddy.getSettings().then(setSettings);
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'show-settings') {
@@ -29,13 +28,13 @@ export default function App() {
   }, []);
 
   const handleSettingsSaved = async (newSettings: AppSettings) => {
-    await window.electronAPI.saveSettings(newSettings);
+    await window.aibuddy.saveSettings(newSettings);
     setSettings(newSettings);
     setView('palette');
   };
 
   const handleClose = () => {
-    window.electronAPI.hideWindow();
+    window.aibuddy.hideWindow();
   };
 
   if (!settings) {

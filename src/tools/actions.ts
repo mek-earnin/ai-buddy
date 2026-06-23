@@ -1,5 +1,5 @@
 import { AppSettings, GenerateRequest } from '../shared/types';
-import { ElectronAPI } from '../shared/electron-api';
+import { AppBridge } from '../shared/bridge';
 import { TONES, resolvePrompt } from './rephrase';
 import { buildSummarizerPrompt } from './summarizer';
 import { buildReviewPolishPrompt } from './review-polish';
@@ -16,7 +16,7 @@ export interface ActionContext {
   /** A separate user-typed question, used by actions like Ask that treat `input` as context. */
   question?: string;
   settings: AppSettings;
-  api: ElectronAPI;
+  api: AppBridge;
 }
 
 export interface Action {

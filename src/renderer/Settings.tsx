@@ -135,7 +135,7 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
   };
 
   const handleConnect = (info: ProviderInfo) => {
-    window.electronAPI.openExternal(info.dashboardUrl);
+    window.aibuddy.openExternal(info.dashboardUrl);
   };
 
   const handleTonePromptChange = (toneId: ToneId, value: string) => {
@@ -305,9 +305,9 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
             type="text"
             value={form.globalShortcut}
             onChange={(e) => setForm((prev) => ({ ...prev, globalShortcut: e.target.value }))}
-            placeholder="Alt+Space"
+            placeholder="Ctrl+Shift+Space"
           />
-          <span className="hint">Restart app after changing shortcut</span>
+          <span className="hint">Applied immediately on save</span>
         </div>
 
         <div className="form-actions">
