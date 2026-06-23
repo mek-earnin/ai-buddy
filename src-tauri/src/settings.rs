@@ -6,6 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+// Only referenced by the release-build Keychain path; debug builds use a file store.
+#[cfg_attr(debug_assertions, allow(dead_code))]
 pub const KEYRING_SERVICE: &str = "com.mek-earnin.aibuddy";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,7 +91,18 @@ pub fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("settings.json"))
 }
 
-fn read_secret(account: &str) -> String {
+// --- Secret storage ---------------------------------------------------------
+//
+// Release builds carry a stable code-signing identity, so the macOS Keychain
+// ACL stays satisfied across app updates and never re-prompts. Debug builds get
+// a fresh ad-hoc signature on every rebuild, which would make the Keychain
+// prompt for a password on every `tauri dev` change. To avoid that, debug
+// builds store secrets in a plaintext `dev-secrets.json` in the app data dir
+// instead of the Keychain. Acceptable for local dev tokens; never used in
+// release.
+
+#[cfg(not(debug_assertions))]
+fn read_secret(_app: &AppHandle, account: &str) -> String {
     match keyring::Entry::new(KEYRING_SERVICE, account) {
         Ok(entry) => match entry.get_password() {
             Ok(pw) => pw,
@@ -100,7 +113,8 @@ fn read_secret(account: &str) -> String {
     }
 }
 
-fn write_secret(account: &str, value: &str) {
+#[cfg(not(debug_assertions))]
+fn write_secret(_app: &AppHandle, account: &str, value: &str) {
     let entry = match keyring::Entry::new(KEYRING_SERVICE, account) {
         Ok(e) => e,
         Err(_) => return,
@@ -110,6 +124,52 @@ fn write_secret(account: &str, value: &str) {
         let _ = entry.delete_credential();
     } else {
         let _ = entry.set_password(value);
+    }
+}
+
+#[cfg(debug_assertions)]
+fn dev_secrets_path(app: &AppHandle) -> Option<PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    Some(dir.join("dev-secrets.json"))
+}
+
+#[cfg(debug_assertions)]
+fn read_secret(app: &AppHandle, account: &str) -> String {
+    let Some(path) = dev_secrets_path(app) else {
+        return String::new();
+    };
+    let map: serde_json::Map<String, serde_json::Value> = fs::read_to_string(&path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default();
+    map.get(account)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+#[cfg(debug_assertions)]
+fn write_secret(app: &AppHandle, account: &str, value: &str) {
+    let Some(path) = dev_secrets_path(app) else {
+        return;
+    };
+    let mut map: serde_json::Map<String, serde_json::Value> = fs::read_to_string(&path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default();
+    if value.is_empty() {
+        map.remove(account);
+    } else {
+        map.insert(
+            account.to_string(),
+            serde_json::Value::String(value.to_string()),
+        );
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&map) {
+        let _ = fs::write(&path, json);
     }
 }
 
@@ -124,9 +184,9 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
         Err(_) => AppSettings::default(),
     };
 
-    settings.custom_api_key = read_secret("customApiKey");
-    settings.jira_api_token = read_secret("jiraApiToken");
-    settings.github_token = read_secret("githubToken");
+    settings.custom_api_key = read_secret(app, "customApiKey");
+    settings.jira_api_token = read_secret(app, "jiraApiToken");
+    settings.github_token = read_secret(app, "githubToken");
 
     settings
 }
@@ -134,9 +194,9 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
 /// Persist settings: write secrets to the Keychain (deleting empty ones) and
 /// write the non-secret fields to JSON with the secret fields blanked out.
 pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
-    write_secret("customApiKey", &settings.custom_api_key);
-    write_secret("jiraApiToken", &settings.jira_api_token);
-    write_secret("githubToken", &settings.github_token);
+    write_secret(app, "customApiKey", &settings.custom_api_key);
+    write_secret(app, "jiraApiToken", &settings.jira_api_token);
+    write_secret(app, "githubToken", &settings.github_token);
 
     let mut to_store = settings.clone();
     to_store.custom_api_key = String::new();

@@ -5,3 +5,8 @@ release/
 .DS_Store
 .env
 .playwright-cli/
+
+# Local dev secrets (debug builds store tokens here instead of Keychain).
+# Normally lives in the OS app-data dir, but ignore it anywhere just in case.
+dev-secrets.json
+*.p12
