@@ -10,18 +10,15 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -34,13 +31,12 @@ jobs:
         run: npx electron-builder --publish never
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: installers-${{ matrix.os }}
+          name: installers-macos
           path: |
             release/*.dmg
             release/*.zip
-            release/*.exe
             release/*.blockmap
             release/*.yml
           if-no-files-found: ignore
@@ -50,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
