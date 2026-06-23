@@ -27,13 +27,23 @@ impl Default for TonePrompts {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
     pub provider: String,
-    pub openai_api_key: String,
-    pub anthropic_api_key: String,
-    pub openai_model: String,
-    pub anthropic_model: String,
+
+    // Ollama
+    pub ollama_server_url: String,
+    pub ollama_model: String,
+
+    // Local CLI
+    pub local_cli_command: String,
+    pub local_cli_timeout_secs: u64,
+
+    // Custom (OpenAI-compatible / oMLX / Ollama-native)
+    pub custom_api_endpoint: String,
+    pub custom_model: String,
+    pub custom_api_key: String,
+
     pub global_shortcut: String,
     pub auto_paste: bool,
     pub tone_prompts: TonePrompts,
@@ -47,11 +57,14 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            provider: "openai".to_string(),
-            openai_api_key: String::new(),
-            anthropic_api_key: String::new(),
-            openai_model: "gpt-4o".to_string(),
-            anthropic_model: "claude-sonnet-4-20250514".to_string(),
+            provider: "ollama".to_string(),
+            ollama_server_url: "http://localhost:11434".to_string(),
+            ollama_model: String::new(),
+            local_cli_command: String::new(),
+            local_cli_timeout_secs: 45,
+            custom_api_endpoint: "http://localhost:11434/api/chat".to_string(),
+            custom_model: String::new(),
+            custom_api_key: String::new(),
             global_shortcut: "Ctrl+Shift+Space".to_string(),
             auto_paste: false,
             tone_prompts: TonePrompts::default(),
@@ -111,8 +124,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
         Err(_) => AppSettings::default(),
     };
 
-    settings.openai_api_key = read_secret("openaiApiKey");
-    settings.anthropic_api_key = read_secret("anthropicApiKey");
+    settings.custom_api_key = read_secret("customApiKey");
     settings.jira_api_token = read_secret("jiraApiToken");
     settings.github_token = read_secret("githubToken");
 
@@ -122,14 +134,12 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
 /// Persist settings: write secrets to the Keychain (deleting empty ones) and
 /// write the non-secret fields to JSON with the secret fields blanked out.
 pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
-    write_secret("openaiApiKey", &settings.openai_api_key);
-    write_secret("anthropicApiKey", &settings.anthropic_api_key);
+    write_secret("customApiKey", &settings.custom_api_key);
     write_secret("jiraApiToken", &settings.jira_api_token);
     write_secret("githubToken", &settings.github_token);
 
     let mut to_store = settings.clone();
-    to_store.openai_api_key = String::new();
-    to_store.anthropic_api_key = String::new();
+    to_store.custom_api_key = String::new();
     to_store.jira_api_token = String::new();
     to_store.github_token = String::new();
 

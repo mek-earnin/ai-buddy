@@ -1,5 +1,13 @@
-import React, { useState } from 'react';
-import { AIProvider, AppSettings, PROVIDERS, ProviderInfo, ToneId } from '../shared/types';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import {
+  AIProvider,
+  AppSettings,
+  PROVIDERS,
+  LOCAL_CLI_TEMPLATES,
+  ToneId,
+} from '../shared/types';
+import { checkOllama, checkCustom } from '../shared/ai-service';
 import { TONES } from '../tools/rephrase';
 import { DEFAULT_PROMPT_REFINER_PROMPT } from '../tools/prompt-refiner';
 import { CloseGlyph } from './icons';
@@ -11,131 +19,110 @@ interface SettingsProps {
   onClose: () => void;
 }
 
-function getApiKeyField(provider: AIProvider): keyof AppSettings {
-  switch (provider) {
-    case 'openai': return 'openaiApiKey';
-    case 'anthropic': return 'anthropicApiKey';
-  }
-}
+type ConnStatus = 'unknown' | 'checking' | 'connected' | 'disconnected';
 
-function getModelField(provider: AIProvider): keyof AppSettings {
-  switch (provider) {
-    case 'openai': return 'openaiModel';
-    case 'anthropic': return 'anthropicModel';
-  }
-}
-
-function ProviderCard({
-  info,
-  apiKey,
-  model,
-  isActive,
-  onActivate,
-  onKeyChange,
-  onModelChange,
-  onConnect,
-}: {
-  info: ProviderInfo;
-  apiKey: string;
-  model: string;
-  isActive: boolean;
-  onActivate: () => void;
-  onKeyChange: (key: string) => void;
-  onModelChange: (model: string) => void;
-  onConnect: () => void;
-}) {
-  const [showKey, setShowKey] = useState(false);
-  const isConnected = apiKey.length > 0;
-
-  return (
-    <div className={`provider-card ${isActive ? 'active' : ''}`}>
-      <div className="provider-header">
-        <div className="provider-name-row">
-          <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
-          <span className="provider-name">{info.name}</span>
-        </div>
-        <div className="provider-status">
-          {isConnected ? (
-            <span className="status-text connected">Connected</span>
-          ) : (
-            <span className="status-text disconnected">Not configured</span>
-          )}
-        </div>
-      </div>
-
-      <div className="provider-body">
-        <div className="key-row">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={apiKey}
-            onChange={(e) => onKeyChange(e.target.value)}
-            placeholder={info.keyPlaceholder}
-            className="key-input"
-          />
-          <button
-            className="icon-btn small"
-            onClick={() => setShowKey(!showKey)}
-            title={showKey ? 'Hide' : 'Show'}
-          >
-            {showKey ? '🙈' : '👁'}
-          </button>
-        </div>
-
-        <div className="model-row">
-          <label>Model:</label>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => onModelChange(e.target.value)}
-            placeholder={info.defaultModel}
-            className="model-input"
-          />
-        </div>
-      </div>
-
-      <div className="provider-actions">
-        <button className="btn btn-connect" onClick={onConnect}>
-          {isConnected ? 'Get New Key' : `Connect to ${info.name}`}
-        </button>
-        {!isActive && (
-          <button className="btn btn-use" onClick={onActivate}>
-            Use {info.name}
-          </button>
-        )}
-        {isActive && <span className="active-badge">Active</span>}
-      </div>
-    </div>
-  );
-}
+const STATUS_LABEL: Record<ConnStatus, string> = {
+  unknown: 'Not checked',
+  checking: 'Checking…',
+  connected: 'Connected',
+  disconnected: 'Disconnected',
+};
 
 export default function Settings({ settings, onSave, onBack, onClose }: SettingsProps) {
   const [form, setForm] = useState<AppSettings>({ ...settings });
   const [saved, setSaved] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [editingServer, setEditingServer] = useState(false);
+
+  const [status, setStatus] = useState<Record<AIProvider, ConnStatus>>({
+    ollama: 'unknown',
+    'local-cli': 'unknown',
+    custom: 'unknown',
+  });
+  const [errors, setErrors] = useState<Record<AIProvider, string>>({
+    ollama: '',
+    'local-cli': '',
+    custom: '',
+  });
+
+  const setProviderStatus = (p: AIProvider, s: ConnStatus, error = '') => {
+    setStatus((prev) => ({ ...prev, [p]: s }));
+    setErrors((prev) => ({ ...prev, [p]: error }));
+  };
 
   const toggleSection = (key: string) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleKeyChange = (provider: AIProvider, key: string) => {
-    const field = getApiKeyField(provider);
-    setForm((prev) => ({ ...prev, [field]: key }));
+  const patch = (changes: Partial<AppSettings>) => {
+    setForm((prev) => ({ ...prev, ...changes }));
     setSaved(false);
   };
 
-  const handleModelChange = (provider: AIProvider, model: string) => {
-    const field = getModelField(provider);
-    setForm((prev) => ({ ...prev, [field]: model }));
-    setSaved(false);
+  const handleProviderChange = (provider: AIProvider) => {
+    patch({ provider });
   };
 
-  const handleActivate = (provider: AIProvider) => {
-    setForm((prev) => ({ ...prev, provider }));
-    setSaved(false);
-  };
+  /** Check connectivity for a provider, update its status, return whether ok. */
+  const verifyProvider = useCallback(
+    async (p: AIProvider): Promise<boolean> => {
+      setProviderStatus(p, 'checking');
+      if (p === 'ollama') {
+        const result = await checkOllama(form.ollamaServerUrl);
+        if (result.ok) {
+          if (result.models.length) patch({ ollamaModel: result.models[0] });
+          setProviderStatus('ollama', 'connected');
+          return true;
+        }
+        setProviderStatus('ollama', 'disconnected', result.error || 'Connection failed');
+        return false;
+      }
+      if (p === 'custom') {
+        const result = await checkCustom(
+          form.customApiEndpoint,
+          form.customModel,
+          form.customApiKey
+        );
+        if (result.ok) {
+          setProviderStatus('custom', 'connected');
+          return true;
+        }
+        setProviderStatus('custom', 'disconnected', result.error || 'Verification failed');
+        return false;
+      }
+      // local-cli: verify the command's binary resolves on PATH.
+      try {
+        await invoke('check_local_cli', { command: form.localCliCommand });
+        setProviderStatus('local-cli', 'connected');
+        return true;
+      } catch (err: any) {
+        setProviderStatus('local-cli', 'disconnected', err?.message || String(err));
+        return false;
+      }
+    },
+    [
+      form.ollamaServerUrl,
+      form.customApiEndpoint,
+      form.customModel,
+      form.customApiKey,
+      form.localCliCommand,
+    ]
+  );
 
-  const handleConnect = (info: ProviderInfo) => {
-    window.aibuddy.openExternal(info.dashboardUrl);
+  // Auto-check the active provider on open and whenever the provider changes,
+  // so a status is always shown without requiring a manual click.
+  const verifyRef = useRef(verifyProvider);
+  verifyRef.current = verifyProvider;
+  useEffect(() => {
+    verifyRef.current(form.provider);
+  }, [form.provider]);
+
+  const handleVerifyCustom = async () => {
+    const ok = await verifyProvider('custom');
+    if (ok) {
+      onSave(form);
+      setSaved(true);
+    }
   };
 
   const handleTonePromptChange = (toneId: ToneId, value: string) => {
@@ -151,9 +138,13 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
     setSaved(true);
   };
 
+  const currentStatus = status[form.provider];
+  const currentError = errors[form.provider];
+  const ollamaConnected = status.ollama === 'connected';
+
   return (
     <div className="surface settings">
-      <div className="topbar">
+      <div className="topbar drag" data-tauri-drag-region>
         <button className="icon-btn" onClick={onBack} title="Back" aria-label="Back">←</button>
         <span className="topbar-title">Settings</span>
         <span className="topbar-spacer" />
@@ -163,21 +154,205 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
       </div>
 
       <div className="settings-content">
-        <div className="section-label">AI Providers</div>
+        <div className="section-label">AI Provider Integration</div>
 
-        {PROVIDERS.map((info) => (
-          <ProviderCard
-            key={info.id}
-            info={info}
-            apiKey={form[getApiKeyField(info.id)] as string}
-            model={form[getModelField(info.id)] as string}
-            isActive={form.provider === info.id}
-            onActivate={() => handleActivate(info.id)}
-            onKeyChange={(key) => handleKeyChange(info.id, key)}
-            onModelChange={(model) => handleModelChange(info.id, model)}
-            onConnect={() => handleConnect(info)}
-          />
-        ))}
+        <div className="provider-panel">
+          <div className="provider-row">
+            <span className="provider-row-label">Provider</span>
+            <div className="provider-row-control">
+              <div className="select-wrap">
+                <select
+                  className="provider-select"
+                  value={form.provider}
+                  onChange={(e) => handleProviderChange(e.target.value as AIProvider)}
+                >
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronGlyph />
+              </div>
+              <span className={`conn-status ${currentStatus === 'connected' ? 'connected' : 'disconnected'}`}>
+                <span
+                  className={`status-dot ${currentStatus === 'connected' ? 'connected' : 'disconnected'}`}
+                />
+                {STATUS_LABEL[currentStatus]}
+              </span>
+            </div>
+          </div>
+
+          {form.provider === 'ollama' && (
+            <div className="provider-config">
+              {editingServer ? (
+                <div className="config-row">
+                  <input
+                    type="text"
+                    className="config-input"
+                    value={form.ollamaServerUrl}
+                    onChange={(e) => patch({ ollamaServerUrl: e.target.value })}
+                    placeholder="http://localhost:11434"
+                  />
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingServer(false)}>
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="config-row">
+                  <span className="config-static">Server: {form.ollamaServerUrl}</span>
+                  <div className="config-row-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setEditingServer(true)}>
+                      Edit
+                    </button>
+                    <button
+                      className="icon-btn small"
+                      onClick={() => verifyProvider('ollama')}
+                      title="Check connection"
+                      aria-label="Check connection"
+                      disabled={status.ollama === 'checking'}
+                    >
+                      <RefreshGlyph />
+                    </button>
+                  </div>
+                </div>
+              )}
+              {ollamaConnected && form.ollamaModel && (
+                <span className="hint">Default model: {form.ollamaModel}</span>
+              )}
+              {status.ollama === 'disconnected' && errors.ollama && (
+                <span className="hint error-hint">{errors.ollama}</span>
+              )}
+            </div>
+          )}
+
+          {form.provider === 'local-cli' && (
+            <div className="provider-config">
+              <div className="config-head">
+                <span className="config-label">Command</span>
+                <div className="select-wrap small">
+                  <select
+                    className="provider-select compact"
+                    value=""
+                    onChange={(e) => {
+                      const tpl = LOCAL_CLI_TEMPLATES.find((t) => t.id === e.target.value);
+                      if (tpl) patch({ localCliCommand: tpl.command });
+                    }}
+                  >
+                    <option value="" disabled>
+                      Load Template
+                    </option>
+                    {LOCAL_CLI_TEMPLATES.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronGlyph />
+                </div>
+              </div>
+              <textarea
+                className="prompt-textarea command-textarea"
+                value={form.localCliCommand}
+                onChange={(e) => patch({ localCliCommand: e.target.value })}
+                placeholder={'e.g. claude -p "$AI_BUDDY_FULL_PROMPT"'}
+                rows={4}
+                spellCheck={false}
+              />
+              <span className="hint">
+                Prompt is exposed via $AI_BUDDY_FULL_PROMPT, $AI_BUDDY_SYSTEM_PROMPT, and
+                $AI_BUDDY_USER_PROMPT.
+              </span>
+
+              <div className="config-row timeout-row">
+                <span className="config-label">Timeout</span>
+                <div className="stepper">
+                  <button
+                    className="stepper-btn"
+                    onClick={() =>
+                      patch({ localCliTimeoutSecs: Math.max(5, form.localCliTimeoutSecs - 5) })
+                    }
+                    aria-label="Decrease timeout"
+                  >
+                    −
+                  </button>
+                  <span className="stepper-value">{form.localCliTimeoutSecs}s</span>
+                  <button
+                    className="stepper-btn"
+                    onClick={() =>
+                      patch({ localCliTimeoutSecs: Math.min(600, form.localCliTimeoutSecs + 5) })
+                    }
+                    aria-label="Increase timeout"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => verifyProvider('local-cli')}
+                  disabled={status['local-cli'] === 'checking'}
+                >
+                  {status['local-cli'] === 'checking' ? 'Checking…' : 'Test command'}
+                </button>
+              </div>
+              {status['local-cli'] === 'disconnected' && errors['local-cli'] && (
+                <span className="hint error-hint">{errors['local-cli']}</span>
+              )}
+            </div>
+          )}
+
+          {form.provider === 'custom' && (
+            <div className="provider-config">
+              <div className="form-group">
+                <label>API Endpoint URL</label>
+                <input
+                  type="text"
+                  value={form.customApiEndpoint}
+                  onChange={(e) => patch({ customApiEndpoint: e.target.value })}
+                  placeholder="http://localhost:11434/api/chat"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="form-group">
+                <label>Model Name</label>
+                <input
+                  type="text"
+                  value={form.customModel}
+                  onChange={(e) => patch({ customModel: e.target.value })}
+                  placeholder="qwen3:1.7b"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="form-group">
+                <label>API Key</label>
+                <input
+                  type="password"
+                  value={form.customApiKey}
+                  onChange={(e) => patch({ customApiKey: e.target.value })}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="form-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={handleVerifyCustom}
+                  disabled={status.custom === 'checking'}
+                >
+                  {status.custom === 'checking' ? 'Verifying…' : 'Verify and Save'}
+                </button>
+                {status.custom === 'connected' && saved && (
+                  <span className="saved-indicator">Verified!</span>
+                )}
+              </div>
+              {status.custom === 'disconnected' && currentError && (
+                <span className="hint error-hint">{currentError}</span>
+              )}
+            </div>
+          )}
+        </div>
 
         <div
           className="section-label collapsible"
@@ -318,5 +493,27 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
         </div>
       </div>
     </div>
+  );
+}
+
+function ChevronGlyph() {
+  return (
+    <svg className="select-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RefreshGlyph() {
+  return (
+    <svg className="glyph" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M13 8a5 5 0 1 1-1.46-3.54M13 3v2.5h-2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

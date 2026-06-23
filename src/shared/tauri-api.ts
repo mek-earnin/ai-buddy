@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { generateText, generateTextStream, AIServiceConfig } from './ai-service';
+import { generateText, generateTextStream, AIServiceConfig, TokenHandler } from './ai-service';
 import { fetchJiraActivity } from './data-sources/jira';
 import { fetchGitHubActivity } from './data-sources/github';
 import { AppSettings, GenerateRequest } from './types';
@@ -18,11 +18,59 @@ async function ensureSettings(): Promise<AppSettings> {
 function aiConfig(s: AppSettings): AIServiceConfig {
   return {
     provider: s.provider,
-    openaiApiKey: s.openaiApiKey,
-    anthropicApiKey: s.anthropicApiKey,
-    openaiModel: s.openaiModel,
-    anthropicModel: s.anthropicModel,
+    ollamaServerUrl: s.ollamaServerUrl,
+    ollamaModel: s.ollamaModel,
+    customApiEndpoint: s.customApiEndpoint,
+    customModel: s.customModel,
+    customApiKey: s.customApiKey,
   };
+}
+
+/** Channel message shape emitted by the Rust `run_local_cli` command. */
+type CliEvent =
+  | { event: 'chunk'; data: string }
+  | { event: 'done'; data: string }
+  | { event: 'error'; data: string };
+
+/**
+ * Run the Local CLI provider: spawn the user's command in the Rust backend and
+ * stream stdout chunks back through a Tauri Channel.
+ */
+async function runLocalCli(
+  request: GenerateRequest,
+  s: AppSettings,
+  onToken: TokenHandler
+): Promise<string> {
+  if (!s.localCliCommand.trim()) {
+    throw new Error('Local CLI command not configured. Set it in Settings.');
+  }
+
+  const fullPrompt = `${request.systemPrompt}\n\n${request.userContent}`.trim();
+  const channel = new Channel<CliEvent>();
+
+  let full = '';
+  let failure: string | null = null;
+  channel.onmessage = (msg) => {
+    if (msg.event === 'chunk') {
+      full += msg.data;
+      onToken(msg.data);
+    } else if (msg.event === 'error') {
+      failure = msg.data;
+    }
+  };
+
+  await invoke('run_local_cli', {
+    command: s.localCliCommand,
+    systemPrompt: request.systemPrompt,
+    userPrompt: request.userContent,
+    fullPrompt,
+    timeoutSecs: s.localCliTimeoutSecs,
+    onChunk: channel,
+  });
+
+  if (failure) throw new Error(failure);
+  if (!full.trim()) throw new Error('No output from Local CLI command');
+  return full.trim();
 }
 
 const bridge: AppBridge = {
@@ -41,11 +89,17 @@ const bridge: AppBridge = {
 
   generateText: async (request: GenerateRequest) => {
     const s = await ensureSettings();
+    if (s.provider === 'local-cli') {
+      return runLocalCli(request, s, () => {});
+    }
     return generateText(request.systemPrompt, request.userContent, aiConfig(s));
   },
 
   generateTextStream: async (request, onChunk) => {
     const s = await ensureSettings();
+    if (s.provider === 'local-cli') {
+      return runLocalCli(request, s, onChunk);
+    }
     return generateTextStream(
       request.systemPrompt,
       request.userContent,

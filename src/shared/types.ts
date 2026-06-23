@@ -1,4 +1,4 @@
-export type AIProvider = 'openai' | 'anthropic';
+export type AIProvider = 'ollama' | 'local-cli' | 'custom';
 
 export type ToneId = 'professional' | 'friendly' | 'direct';
 
@@ -19,10 +19,20 @@ export interface TonePrompts {
 
 export interface AppSettings {
   provider: AIProvider;
-  openaiApiKey: string;
-  anthropicApiKey: string;
-  openaiModel: string;
-  anthropicModel: string;
+
+  // Ollama
+  ollamaServerUrl: string;
+  ollamaModel: string;
+
+  // Local CLI
+  localCliCommand: string;
+  localCliTimeoutSecs: number;
+
+  // Custom (OpenAI-compatible / oMLX / Ollama-native)
+  customApiEndpoint: string;
+  customModel: string;
+  customApiKey: string;
+
   globalShortcut: string;
   autoPaste: boolean;
   tonePrompts: TonePrompts;
@@ -42,35 +52,62 @@ export interface GenerateRequest {
 
 export interface ProviderInfo {
   id: AIProvider;
-  name: string;
-  dashboardUrl: string;
-  keyPlaceholder: string;
-  defaultModel: string;
+  label: string;
 }
 
 export const PROVIDERS: ProviderInfo[] = [
+  { id: 'ollama', label: 'Ollama' },
+  { id: 'local-cli', label: 'Local CLI' },
+  { id: 'custom', label: 'Custom' },
+];
+
+export interface LocalCliTemplate {
+  id: string;
+  label: string;
+  command: string;
+}
+
+/**
+ * Presets for the Local CLI "Load Template" dropdown. The prompt is exposed to
+ * the command through the `AI_BUDDY_FULL_PROMPT` env var (plus the system/user
+ * split via `AI_BUDDY_SYSTEM_PROMPT` / `AI_BUDDY_USER_PROMPT`).
+ */
+export const LOCAL_CLI_TEMPLATES: LocalCliTemplate[] = [
   {
-    id: 'openai',
-    name: 'OpenAI',
-    dashboardUrl: 'https://platform.openai.com/api-keys',
-    keyPlaceholder: 'sk-...',
-    defaultModel: 'gpt-4o',
+    id: 'claude',
+    label: 'Claude CLI',
+    command: 'claude -p "$AI_BUDDY_FULL_PROMPT"',
   },
   {
-    id: 'anthropic',
-    name: 'Anthropic',
-    dashboardUrl: 'https://console.anthropic.com/settings/keys',
-    keyPlaceholder: 'sk-ant-...',
-    defaultModel: 'claude-sonnet-4-20250514',
+    id: 'cursor-agent',
+    label: 'Cursor Agent',
+    command: 'cursor-agent -p "$AI_BUDDY_FULL_PROMPT"',
+  },
+  {
+    id: 'codex',
+    label: 'Codex CLI',
+    command: 'codex exec "$AI_BUDDY_FULL_PROMPT"',
+  },
+  {
+    id: 'llm',
+    label: 'llm (Datasette)',
+    command: 'llm -s "$AI_BUDDY_SYSTEM_PROMPT" "$AI_BUDDY_USER_PROMPT"',
   },
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  provider: 'openai',
-  openaiApiKey: '',
-  anthropicApiKey: '',
-  openaiModel: 'gpt-4o',
-  anthropicModel: 'claude-sonnet-4-20250514',
+  provider: 'ollama',
+
+  ollamaServerUrl: 'http://localhost:11434',
+  ollamaModel: '',
+
+  localCliCommand: '',
+  localCliTimeoutSecs: 45,
+
+  customApiEndpoint: 'http://localhost:11434/api/chat',
+  customModel: '',
+  customApiKey: '',
+
   globalShortcut: 'Ctrl+Shift+Space',
   autoPaste: false,
   tonePrompts: {

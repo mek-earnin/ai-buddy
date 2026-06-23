@@ -35,21 +35,42 @@ fn cursor_location() -> Option<(f64, f64)> {
     Some((point.x, point.y))
 }
 
-/// Position the palette window near the cursor, clamped to its current monitor.
+/// Logical bounds (top-left origin, points) of a monitor.
+fn monitor_logical_bounds(monitor: &tauri::Monitor) -> (f64, f64, f64, f64) {
+    let scale = monitor.scale_factor();
+    let pos = monitor.position();
+    let size = monitor.size();
+    (
+        pos.x as f64 / scale,
+        pos.y as f64 / scale,
+        size.width as f64 / scale,
+        size.height as f64 / scale,
+    )
+}
+
+/// Position the palette window near the cursor, clamped to the monitor the
+/// cursor is currently on (not the one the window was last shown on).
 fn position_window(window: &tauri::WebviewWindow) {
-    let (mut x, mut y) = match cursor_location() {
-        Some((cx, cy)) => (cx - 240.0, cy + 10.0),
+    let (cx, cy) = match cursor_location() {
+        Some(p) => p,
         None => return,
     };
 
-    if let Ok(Some(monitor)) = window.current_monitor() {
-        let scale = monitor.scale_factor();
-        let pos = monitor.position();
-        let size = monitor.size();
-        let mon_x = pos.x as f64 / scale;
-        let mon_y = pos.y as f64 / scale;
-        let mon_w = size.width as f64 / scale;
-        let mon_h = size.height as f64 / scale;
+    let mut x = cx - WIN_W / 2.0;
+    let mut y = cy + 10.0;
+
+    // Pick the monitor that actually contains the cursor. Falling back to
+    // `current_monitor()` (the window's last monitor) would clamp the cursor's
+    // coordinates into the wrong screen on multi-monitor setups.
+    let monitor = window.available_monitors().ok().and_then(|monitors| {
+        monitors.into_iter().find(|m| {
+            let (mx, my, mw, mh) = monitor_logical_bounds(m);
+            cx >= mx && cx < mx + mw && cy >= my && cy < my + mh
+        })
+    });
+
+    if let Some(monitor) = monitor {
+        let (mon_x, mon_y, mon_w, mon_h) = monitor_logical_bounds(&monitor);
         let max_x = (mon_x + mon_w - WIN_W).max(mon_x);
         let max_y = (mon_y + mon_h - WIN_H).max(mon_y);
         x = x.clamp(mon_x, max_x);
@@ -179,7 +200,9 @@ pub fn run() {
             commands::paste_result,
             commands::hide_window,
             commands::open_external,
-            commands::get_clipboard_text
+            commands::get_clipboard_text,
+            commands::run_local_cli,
+            commands::check_local_cli
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
