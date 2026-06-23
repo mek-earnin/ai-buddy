@@ -28,8 +28,57 @@ const STATUS_LABEL: Record<ConnStatus, string> = {
   disconnected: 'Disconnected',
 };
 
+const PROMPT_PLACEHOLDER = 'Enter your custom prompt…';
+
+const toneDefaultPrompt = (id: ToneId): string =>
+  TONES.find((t) => t.id === id)?.defaultPrompt ?? '';
+
+/**
+ * Replace empty prompt fields with their defaults so each textarea shows the
+ * actual prompt that will be used, ready for the user to edit or replace.
+ */
+function prefillPromptDefaults(s: AppSettings): AppSettings {
+  return {
+    ...s,
+    tonePrompts: {
+      professional: s.tonePrompts.professional.trim()
+        ? s.tonePrompts.professional
+        : toneDefaultPrompt('professional'),
+      friendly: s.tonePrompts.friendly.trim()
+        ? s.tonePrompts.friendly
+        : toneDefaultPrompt('friendly'),
+      direct: s.tonePrompts.direct.trim()
+        ? s.tonePrompts.direct
+        : toneDefaultPrompt('direct'),
+    },
+    promptRefinerPrompt: s.promptRefinerPrompt.trim()
+      ? s.promptRefinerPrompt
+      : DEFAULT_PROMPT_REFINER_PROMPT,
+  };
+}
+
+/**
+ * Collapse a prompt back to '' when it is blank or unchanged from the default.
+ * Persisting '' (rather than the default text) keeps users inheriting future
+ * updates to the default prompt.
+ */
+const collapseToDefault = (value: string, def: string): string =>
+  value.trim() === '' || value.trim() === def.trim() ? '' : value;
+
+function normalizePromptsForSave(s: AppSettings): AppSettings {
+  return {
+    ...s,
+    tonePrompts: {
+      professional: collapseToDefault(s.tonePrompts.professional, toneDefaultPrompt('professional')),
+      friendly: collapseToDefault(s.tonePrompts.friendly, toneDefaultPrompt('friendly')),
+      direct: collapseToDefault(s.tonePrompts.direct, toneDefaultPrompt('direct')),
+    },
+    promptRefinerPrompt: collapseToDefault(s.promptRefinerPrompt, DEFAULT_PROMPT_REFINER_PROMPT),
+  };
+}
+
 export default function Settings({ settings, onSave, onBack, onClose }: SettingsProps) {
-  const [form, setForm] = useState<AppSettings>({ ...settings });
+  const [form, setForm] = useState<AppSettings>(() => prefillPromptDefaults(settings));
   const [saved, setSaved] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [editingServer, setEditingServer] = useState(false);
@@ -120,7 +169,9 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
   const handleVerifyCustom = async () => {
     const ok = await verifyProvider('custom');
     if (ok) {
-      onSave(form);
+      const normalized = normalizePromptsForSave(form);
+      onSave(normalized);
+      setForm(prefillPromptDefaults(normalized));
       setSaved(true);
     }
   };
@@ -134,7 +185,9 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
   };
 
   const handleSave = () => {
-    onSave(form);
+    const normalized = normalizePromptsForSave(form);
+    onSave(normalized);
+    setForm(prefillPromptDefaults(normalized));
     setSaved(true);
   };
 
@@ -424,11 +477,11 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
                 <textarea
                   value={form.tonePrompts[tone.id]}
                   onChange={(e) => handleTonePromptChange(tone.id, e.target.value)}
-                  placeholder={tone.defaultPrompt}
+                  placeholder={PROMPT_PLACEHOLDER}
                   rows={4}
                   className="prompt-textarea"
                 />
-                <span className="hint">Leave empty to use the default prompt</span>
+                <span className="hint">Clear and save to restore the default prompt</span>
               </div>
             ))}
           </div>
@@ -448,11 +501,11 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
               <textarea
                 value={form.promptRefinerPrompt}
                 onChange={(e) => { setForm((prev) => ({ ...prev, promptRefinerPrompt: e.target.value })); setSaved(false); }}
-                placeholder={DEFAULT_PROMPT_REFINER_PROMPT}
+                placeholder={PROMPT_PLACEHOLDER}
                 rows={8}
                 className="prompt-textarea"
               />
-              <span className="hint">Leave empty to use the default prompt</span>
+              <span className="hint">Clear and save to restore the default prompt</span>
             </div>
           </div>
         )}
