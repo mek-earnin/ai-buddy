@@ -329,7 +329,7 @@ export default function CommandPalette({
     const hasContext = inputText.trim().length > 0;
     return (
       <div className="surface">
-        <div className="topbar">
+        <div className="topbar drag" data-tauri-drag-region>
           <button className="icon-btn" onClick={backToList} title="Back (Esc)" aria-label="Back">
             <BackGlyph />
           </button>
@@ -386,7 +386,7 @@ export default function CommandPalette({
   if (view === 'running' || view === 'result') {
     return (
       <div className="surface">
-        <div className="topbar">
+        <div className="topbar drag" data-tauri-drag-region>
           <button className="icon-btn" onClick={backToList} title="Back (Esc)" aria-label="Back">
             <BackGlyph />
           </button>
@@ -507,7 +507,7 @@ export default function CommandPalette({
 
   return (
     <div className="surface">
-      <div className="topbar drag">
+      <div className="topbar drag" data-tauri-drag-region>
         <span className="brand">
           <span className="brand-dot" /> AIBuddy
         </span>
