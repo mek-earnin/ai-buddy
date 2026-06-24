@@ -1,4 +1,4 @@
-export type AIProvider = 'ollama' | 'local-cli' | 'custom';
+export type AIProvider = 'omlx' | 'ollama' | 'local-cli' | 'custom';
 
 export type ToneId = 'professional' | 'friendly' | 'direct';
 
@@ -19,6 +19,11 @@ export interface TonePrompts {
 
 export interface AppSettings {
   provider: AIProvider;
+
+  // oMLX (https://github.com/jundot/omlx — OpenAI-compatible, /v1/chat/completions)
+  omlxServerUrl: string;
+  omlxModel: string;
+  omlxApiKey: string;
 
   // Ollama
   ollamaServerUrl: string;
@@ -56,6 +61,7 @@ export interface ProviderInfo {
 }
 
 export const PROVIDERS: ProviderInfo[] = [
+  { id: 'omlx', label: 'oMLX' },
   { id: 'ollama', label: 'Ollama' },
   { id: 'local-cli', label: 'Local CLI' },
   { id: 'custom', label: 'Custom' },
@@ -96,7 +102,11 @@ export const LOCAL_CLI_TEMPLATES: LocalCliTemplate[] = [
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  provider: 'ollama',
+  provider: 'omlx',
+
+  omlxServerUrl: 'http://localhost:8000',
+  omlxModel: '',
+  omlxApiKey: '',
 
   ollamaServerUrl: 'http://localhost:11434',
   ollamaModel: '',

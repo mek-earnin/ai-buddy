@@ -797,6 +797,15 @@ kbd {
   align-items: center;
 }
 
+.select-wrap.full {
+  display: flex;
+  width: 100%;
+}
+
+.select-wrap.full .provider-select {
+  width: 100%;
+}
+
 .select-chevron {
   position: absolute;
   right: 9px;

@@ -7,7 +7,7 @@ import {
   LOCAL_CLI_TEMPLATES,
   ToneId,
 } from '../shared/types';
-import { checkOllama, checkCustom } from '../shared/ai-service';
+import { checkOllama, checkCustom, checkOmlx } from '../shared/ai-service';
 import { TONES } from '../tools/rephrase';
 import { DEFAULT_PROMPT_REFINER_PROMPT } from '../tools/prompt-refiner';
 import { CloseGlyph } from './icons';
@@ -82,13 +82,16 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
   const [saved, setSaved] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [editingServer, setEditingServer] = useState(false);
+  const [omlxModels, setOmlxModels] = useState<string[]>([]);
 
   const [status, setStatus] = useState<Record<AIProvider, ConnStatus>>({
+    omlx: 'unknown',
     ollama: 'unknown',
     'local-cli': 'unknown',
     custom: 'unknown',
   });
   const [errors, setErrors] = useState<Record<AIProvider, string>>({
+    omlx: '',
     ollama: '',
     'local-cli': '',
     custom: '',
@@ -116,6 +119,20 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
   const verifyProvider = useCallback(
     async (p: AIProvider): Promise<boolean> => {
       setProviderStatus(p, 'checking');
+      if (p === 'omlx') {
+        const result = await checkOmlx(form.omlxServerUrl, form.omlxApiKey);
+        if (result.ok) {
+          setOmlxModels(result.models);
+          if (result.models.length && !form.omlxModel.trim()) {
+            patch({ omlxModel: result.models[0] });
+          }
+          setProviderStatus('omlx', 'connected');
+          return true;
+        }
+        setOmlxModels([]);
+        setProviderStatus('omlx', 'disconnected', result.error || 'Connection failed');
+        return false;
+      }
       if (p === 'ollama') {
         const result = await checkOllama(form.ollamaServerUrl);
         if (result.ok) {
@@ -150,6 +167,9 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
       }
     },
     [
+      form.omlxServerUrl,
+      form.omlxModel,
+      form.omlxApiKey,
       form.ollamaServerUrl,
       form.customApiEndpoint,
       form.customModel,
@@ -194,6 +214,10 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
   const currentStatus = status[form.provider];
   const currentError = errors[form.provider];
   const ollamaConnected = status.ollama === 'connected';
+  // Show the current value in the dropdown even if it's not in the fetched list.
+  const omlxModelOptions = form.omlxModel.trim() && !omlxModels.includes(form.omlxModel.trim())
+    ? [form.omlxModel.trim(), ...omlxModels]
+    : omlxModels;
 
   return (
     <div className="surface settings">
@@ -235,6 +259,88 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
               </span>
             </div>
           </div>
+
+          {form.provider === 'omlx' && (
+            <div className="provider-config">
+              {editingServer ? (
+                <div className="config-row">
+                  <input
+                    type="text"
+                    className="config-input"
+                    value={form.omlxServerUrl}
+                    onChange={(e) => patch({ omlxServerUrl: e.target.value })}
+                    placeholder="http://localhost:8000"
+                  />
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingServer(false)}>
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="config-row">
+                  <span className="config-static">Server: {form.omlxServerUrl}</span>
+                  <div className="config-row-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setEditingServer(true)}>
+                      Edit
+                    </button>
+                    <button
+                      className="icon-btn small"
+                      onClick={() => verifyProvider('omlx')}
+                      title="Check connection"
+                      aria-label="Check connection"
+                      disabled={status.omlx === 'checking'}
+                    >
+                      <RefreshGlyph />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>API Key</label>
+                <input
+                  type="password"
+                  value={form.omlxApiKey}
+                  onChange={(e) => patch({ omlxApiKey: e.target.value })}
+                  placeholder="Optional — only if oMLX was started with --api-key"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Model</label>
+                {omlxModelOptions.length > 0 ? (
+                  <div className="select-wrap full">
+                    <select
+                      className="provider-select"
+                      value={form.omlxModel}
+                      onChange={(e) => patch({ omlxModel: e.target.value })}
+                    >
+                      {omlxModelOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronGlyph />
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={form.omlxModel}
+                    onChange={(e) => patch({ omlxModel: e.target.value })}
+                    placeholder="Model name (auto-detected when connected)"
+                    spellCheck={false}
+                  />
+                )}
+                <span className="hint">
+                  Connect to load available models, or type a name manually.
+                </span>
+              </div>
+
+              {status.omlx === 'disconnected' && errors.omlx && (
+                <span className="hint error-hint">{errors.omlx}</span>
+              )}
+            </div>
+          )}
 
           {form.provider === 'ollama' && (
             <div className="provider-config">

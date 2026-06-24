@@ -3,6 +3,9 @@ import { tauriFetch } from './http';
 
 export interface AIServiceConfig {
   provider: AIProvider;
+  omlxServerUrl: string;
+  omlxModel: string;
+  omlxApiKey: string;
   ollamaServerUrl: string;
   ollamaModel: string;
   customApiEndpoint: string;
@@ -44,8 +47,10 @@ export async function generateTextStream(
     case 'custom':
       return streamCustom(systemPrompt, userContent, config, onToken);
     case 'ollama':
-    default:
       return streamOllama(systemPrompt, userContent, config, onToken);
+    case 'omlx':
+    default:
+      return streamOmlx(systemPrompt, userContent, config, onToken);
   }
 }
 
@@ -251,7 +256,93 @@ async function streamCustom(
   return full.trim();
 }
 
+/** Bearer auth headers for oMLX requests (the API key is optional). */
+function omlxHeaders(apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
+  return headers;
+}
+
+/** List models from an oMLX (OpenAI-compatible) server via GET /v1/models. */
+async function fetchOmlxModels(serverUrl: string, apiKey: string): Promise<string[]> {
+  const base = trimTrailingSlash(serverUrl);
+  const res = await tauriFetch(`${base}/v1/models`, {
+    method: 'GET',
+    headers: omlxHeaders(apiKey),
+  });
+  if (!res.ok) {
+    throw new Error(await responseDetail(res));
+  }
+  const data = await res.json();
+  const models = Array.isArray(data?.data) ? data.data : [];
+  return models.map((m: any) => m?.id).filter((id: any): id is string => !!id);
+}
+
+async function resolveOmlxModel(config: AIServiceConfig): Promise<string> {
+  if (config.omlxModel.trim()) return config.omlxModel.trim();
+  const models = await fetchOmlxModels(config.omlxServerUrl, config.omlxApiKey);
+  if (!models.length) {
+    throw new Error('No oMLX models available. Load a model in the oMLX admin panel first.');
+  }
+  return models[0];
+}
+
+async function streamOmlx(
+  systemPrompt: string,
+  userContent: string,
+  config: AIServiceConfig,
+  onToken: TokenHandler
+): Promise<string> {
+  if (!config.omlxServerUrl.trim()) {
+    throw new Error('oMLX server URL not configured. Set it in Settings.');
+  }
+
+  const model = await resolveOmlxModel(config);
+  const base = trimTrailingSlash(config.omlxServerUrl);
+
+  const res = await tauriFetch(`${base}/v1/chat/completions`, {
+    method: 'POST',
+    headers: omlxHeaders(config.omlxApiKey),
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`oMLX request failed — ${await responseDetail(res)}`);
+  }
+
+  const full = await consumeStream(res, parseOpenAiLine, onToken);
+  if (!full.trim()) {
+    throw new Error('No response from oMLX');
+  }
+  return full.trim();
+}
+
 // ---------- Connection checks (used by Settings) ----------
+
+export interface OmlxCheckResult {
+  ok: boolean;
+  models: string[];
+  error?: string;
+}
+
+export async function checkOmlx(
+  serverUrl: string,
+  apiKey: string
+): Promise<OmlxCheckResult> {
+  try {
+    const models = await fetchOmlxModels(serverUrl, apiKey);
+    return { ok: true, models };
+  } catch (err) {
+    return { ok: false, models: [], error: errorDetail(err) };
+  }
+}
 
 export interface OllamaCheckResult {
   ok: boolean;

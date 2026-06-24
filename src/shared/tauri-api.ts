@@ -18,6 +18,9 @@ async function ensureSettings(): Promise<AppSettings> {
 function aiConfig(s: AppSettings): AIServiceConfig {
   return {
     provider: s.provider,
+    omlxServerUrl: s.omlxServerUrl,
+    omlxModel: s.omlxModel,
+    omlxApiKey: s.omlxApiKey,
     ollamaServerUrl: s.ollamaServerUrl,
     ollamaModel: s.ollamaModel,
     customApiEndpoint: s.customApiEndpoint,

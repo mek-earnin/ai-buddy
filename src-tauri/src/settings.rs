@@ -33,6 +33,11 @@ impl Default for TonePrompts {
 pub struct AppSettings {
     pub provider: String,
 
+    // oMLX (https://github.com/jundot/omlx — OpenAI-compatible, /v1/chat/completions)
+    pub omlx_server_url: String,
+    pub omlx_model: String,
+    pub omlx_api_key: String,
+
     // Ollama
     pub ollama_server_url: String,
     pub ollama_model: String,
@@ -59,7 +64,10 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            provider: "ollama".to_string(),
+            provider: "omlx".to_string(),
+            omlx_server_url: "http://localhost:8000".to_string(),
+            omlx_model: String::new(),
+            omlx_api_key: String::new(),
             ollama_server_url: "http://localhost:11434".to_string(),
             ollama_model: String::new(),
             local_cli_command: String::new(),
@@ -184,6 +192,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
         Err(_) => AppSettings::default(),
     };
 
+    settings.omlx_api_key = read_secret(app, "omlxApiKey");
     settings.custom_api_key = read_secret(app, "customApiKey");
     settings.jira_api_token = read_secret(app, "jiraApiToken");
     settings.github_token = read_secret(app, "githubToken");
@@ -194,11 +203,13 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
 /// Persist settings: write secrets to the Keychain (deleting empty ones) and
 /// write the non-secret fields to JSON with the secret fields blanked out.
 pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
+    write_secret(app, "omlxApiKey", &settings.omlx_api_key);
     write_secret(app, "customApiKey", &settings.custom_api_key);
     write_secret(app, "jiraApiToken", &settings.jira_api_token);
     write_secret(app, "githubToken", &settings.github_token);
 
     let mut to_store = settings.clone();
+    to_store.omlx_api_key = String::new();
     to_store.custom_api_key = String::new();
     to_store.jira_api_token = String::new();
     to_store.github_token = String::new();
