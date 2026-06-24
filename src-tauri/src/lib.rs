@@ -72,6 +72,36 @@ fn round_window_corners(window: &tauri::WebviewWindow, radius: f64) {
     }
 }
 
+/// Whether the app is trusted for Accessibility, optionally showing the system
+/// prompt that guides the user to System Settings → Privacy & Security →
+/// Accessibility and adds the app to the list.
+///
+/// Accessibility trust is REQUIRED for the selection capture to work at all:
+/// reading another app's `AXSelectedText` and synthesizing Cmd+C / Cmd+V via
+/// System Events both fail with error 1002 ("not allowed to send keystrokes")
+/// without it.
+#[cfg(target_os = "macos")]
+fn accessibility_trusted(prompt: bool) -> bool {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
+        static kAXTrustedCheckOptionPrompt: CFStringRef;
+    }
+
+    unsafe {
+        let key = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt);
+        let value = CFBoolean::from(prompt);
+        let options =
+            CFDictionary::from_CFType_pairs(&[(key.as_CFType(), value.as_CFType())]);
+        AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef())
+    }
+}
+
 /// Read the global cursor position (logical points, top-left origin).
 fn cursor_location() -> Option<(f64, f64)> {
     use core_graphics::event::CGEvent;
@@ -228,6 +258,19 @@ pub fn run() {
 
             // Hide from the Dock; live only in the menu bar.
             let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Selection capture (AX reads + synthesized Cmd+C/Cmd+V) needs
+            // Accessibility trust. Prompt on launch if we don't have it yet so
+            // the app shows up in System Settings → Accessibility.
+            #[cfg(target_os = "macos")]
+            {
+                if !accessibility_trusted(true) {
+                    settings::log(
+                        &handle,
+                        "accessibility not trusted; selection capture is disabled until the app is enabled in System Settings → Privacy & Security → Accessibility",
+                    );
+                }
+            }
 
             if let Some(window) = app.get_webview_window("main") {
                 // Translucent vibrancy background (macOS).

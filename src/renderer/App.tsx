@@ -10,6 +10,10 @@ export default function App() {
   const [selectedText, setSelectedText] = useState('');
   const [targetEditable, setTargetEditable] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  // Bumped every time the window is (re)shown. The webview is never torn down,
+  // so we key the palette on this to force a fresh mount on each open — which
+  // refocuses the search field and resets the palette to its initial view.
+  const [showNonce, setShowNonce] = useState(0);
 
   useEffect(() => {
     window.aibuddy.getSettings().then(setSettings);
@@ -21,6 +25,8 @@ export default function App() {
       if (event.data?.channel === 'selected-text') {
         setSelectedText(event.data.text || '');
         setTargetEditable(event.data.editable !== false);
+        setView('palette');
+        setShowNonce((n) => n + 1);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -54,6 +60,7 @@ export default function App() {
 
   return (
     <CommandPalette
+      key={showNonce}
       selectedText={selectedText}
       targetEditable={targetEditable}
       settings={settings}
