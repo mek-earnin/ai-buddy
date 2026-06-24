@@ -1,6 +1,6 @@
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -83,6 +83,43 @@ pub fn get_clipboard_text(app: AppHandle) -> Result<String, String> {
     app.clipboard().read_text().map_err(|e| e.to_string())
 }
 
+/// Resolve the PATH as seen by the user's interactive login shell.
+///
+/// When the app is launched as a GUI bundle (Finder/Dock), it inherits only
+/// launchd's minimal PATH. A login-but-non-interactive shell (`-lc`) sources
+/// `.zprofile`/`.zlogin` but NOT `.zshrc`, yet most users add tool directories
+/// (e.g. `~/.local/bin`, where `cursor-agent` lives) in `.zshrc`. We therefore
+/// capture PATH from an interactive login shell (`-ilc`) once and cache it.
+///
+/// Interactive shells emit startup/shell-integration noise on stdout (e.g.
+/// iTerm2 escape sequences), so we bracket `$PATH` with a unique marker and
+/// extract only the value between the markers.
+fn resolved_shell_path() -> Option<String> {
+    static CACHE: OnceLock<Option<String>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            const MARKER: &str = "__AI_BUDDY_PATH_BOUNDARY__";
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+            let output = Command::new(&shell)
+                .arg("-ilc")
+                .arg(format!("printf '%s%s%s' '{MARKER}' \"$PATH\" '{MARKER}'"))
+                .stdin(Stdio::null())
+                .output()
+                .ok()?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut parts = stdout.split(MARKER);
+            parts.next()?; // leading shell-integration noise, if any
+            let path = parts.next()?.trim();
+            if path.is_empty() {
+                None
+            } else {
+                Some(path.to_string())
+            }
+        })
+        .clone()
+}
+
 /// Verify that the Local CLI command's binary resolves on PATH (used by the
 /// Settings connection-status indicator). Runs `command -v <first-token>` in the
 /// user's shell so PATH matches what `run_local_cli` will see.
@@ -103,9 +140,12 @@ pub async fn check_local_cli(command: String) -> Result<(), String> {
         }
 
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        let output = Command::new(&shell)
-            .arg("-lc")
-            .arg(format!("command -v {first}"))
+        let mut cmd = Command::new(&shell);
+        cmd.arg("-lc").arg(format!("command -v {first}"));
+        if let Some(path) = resolved_shell_path() {
+            cmd.env("PATH", path);
+        }
+        let output = cmd
             .output()
             .map_err(|e| format!("Failed to run shell: {e}"))?;
 
@@ -167,15 +207,23 @@ fn run_local_cli_blocking(
 ) -> Result<(), String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
 
-    let mut child = Command::new(&shell)
-        .arg("-lc")
+    let mut cmd = Command::new(&shell);
+    cmd.arg("-lc")
         .arg(&command)
         .env("AI_BUDDY_FULL_PROMPT", &full_prompt)
         .env("AI_BUDDY_SYSTEM_PROMPT", &system_prompt)
         .env("AI_BUDDY_USER_PROMPT", &user_prompt)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    // Inject the interactive-login PATH so GUI-launched apps can find binaries
+    // installed under `~/.local/bin` etc. (kept as a clean non-interactive `-lc`
+    // run to avoid shell-integration noise in the streamed stdout).
+    if let Some(path) = resolved_shell_path() {
+        cmd.env("PATH", path);
+    }
+
+    let mut child = cmd
         .spawn()
         .map_err(|e| {
             let msg = format!("Failed to start command: {e}");

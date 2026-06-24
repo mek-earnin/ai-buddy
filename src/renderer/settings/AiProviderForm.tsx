@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { AIProvider, AppSettings, PROVIDERS, LOCAL_CLI_TEMPLATES } from '../../shared/types';
 import { checkOllama, checkCustom, checkOmlx } from '../../shared/ai-service';
 import { ChevronGlyph, RefreshGlyph } from '../icons';
@@ -30,6 +30,12 @@ interface AiProviderFormProps {
 
 type ConnStatus = 'unknown' | 'checking' | 'connected' | 'disconnected';
 type AutoSaveState = 'idle' | 'saving' | 'saved';
+
+/** Channel message shape emitted by the Rust `run_local_cli` command. */
+type CliEvent =
+  | { event: 'chunk'; data: string }
+  | { event: 'done'; data: string }
+  | { event: 'error'; data: string };
 
 const STATUS_LABEL: Record<ConnStatus, string> = {
   unknown: 'Not checked',
@@ -63,6 +69,8 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
   const [editingServer, setEditingServer] = useState(false);
   const [omlxModels, setOmlxModels] = useState<string[]>([]);
   const [autoSave, setAutoSave] = useState<AutoSaveState>('idle');
+  // Streamed stdout from the last "Test command" run (null = never run yet).
+  const [localCliOutput, setLocalCliOutput] = useState<string | null>(null);
 
   const [status, setStatus] = useState<Record<AIProvider, ConnStatus>>({
     omlx: 'unknown',
@@ -183,6 +191,60 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
   useEffect(() => {
     verifyRef.current(form.provider);
   }, [form.provider]);
+
+  /**
+   * Actually run the Local CLI command with a short test prompt and surface the
+   * streamed stdout (or the error) so the user can confirm it works end-to-end,
+   * not just that the binary resolves on PATH.
+   */
+  const handleTestLocalCli = useCallback(async () => {
+    if (!form.localCliCommand.trim()) {
+      setLocalCliOutput(null);
+      setProviderStatus('local-cli', 'disconnected', 'Command is empty');
+      return;
+    }
+
+    setProviderStatus('local-cli', 'checking');
+    setLocalCliOutput('');
+
+    const systemPrompt = "You are AI Buddy's connection test.";
+    const userPrompt =
+      'Reply in one short line confirming you received this message, and state your ' +
+      'model ID, e.g. "Connected — model: <your-model-id>".';
+    const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+    const channel = new Channel<CliEvent>();
+    let full = '';
+    let failure: string | null = null;
+    channel.onmessage = (msg) => {
+      if (msg.event === 'chunk') {
+        full += msg.data;
+        setLocalCliOutput(full);
+      } else if (msg.event === 'error') {
+        failure = msg.data;
+      }
+    };
+
+    try {
+      await invoke('run_local_cli', {
+        command: form.localCliCommand,
+        systemPrompt,
+        userPrompt,
+        fullPrompt,
+        timeoutSecs: form.localCliTimeoutSecs,
+        onChunk: channel,
+      });
+      if (failure) {
+        setProviderStatus('local-cli', 'disconnected', failure);
+      } else if (!full.trim()) {
+        setProviderStatus('local-cli', 'disconnected', 'Command produced no output');
+      } else {
+        setProviderStatus('local-cli', 'connected');
+      }
+    } catch (err: any) {
+      setProviderStatus('local-cli', 'disconnected', failure ?? (err?.message || String(err)));
+    }
+  }, [form.localCliCommand, form.localCliTimeoutSecs]);
 
   const currentStatus = status[form.provider];
   const currentError = errors[form.provider];
@@ -419,14 +481,22 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
               <div className="form-actions">
                 <button
                   className="btn btn-ghost btn-sm"
-                  onClick={() => verifyProvider('local-cli')}
+                  onClick={handleTestLocalCli}
                   disabled={status['local-cli'] === 'checking'}
                 >
-                  {status['local-cli'] === 'checking' ? 'Checking…' : 'Test command'}
+                  {status['local-cli'] === 'checking' ? 'Running…' : 'Test command'}
                 </button>
               </div>
               {status['local-cli'] === 'disconnected' && errors['local-cli'] && (
                 <span className="hint error-hint">{errors['local-cli']}</span>
+              )}
+              {localCliOutput !== null && localCliOutput.trim() && (
+                <div className="cli-test-output">
+                  <span className="config-label">
+                    {status['local-cli'] === 'checking' ? 'Output (streaming…)' : 'Output'}
+                  </span>
+                  <pre className="cli-output-pre">{localCliOutput}</pre>
+                </div>
               )}
             </div>
           )}
