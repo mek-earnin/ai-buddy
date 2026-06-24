@@ -8,6 +8,28 @@ export function CloseGlyph() {
   );
 }
 
+export function ChevronGlyph() {
+  return (
+    <svg className="select-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function RefreshGlyph() {
+  return (
+    <svg className="glyph" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M13 8a5 5 0 1 1-1.46-3.54M13 3v2.5h-2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function GearGlyph() {
   return (
     <svg className="glyph" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">

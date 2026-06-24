@@ -33,10 +33,11 @@ export default function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // Persist without navigating away — the AI provider section auto-saves, and
+  // the manual sections save independently. Use the Back button to leave.
   const handleSettingsSaved = async (newSettings: AppSettings) => {
     await window.aibuddy.saveSettings(newSettings);
     setSettings(newSettings);
-    setView('palette');
   };
 
   const handleClose = () => {
