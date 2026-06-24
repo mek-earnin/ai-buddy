@@ -272,6 +272,13 @@ export default function CommandPalette({
       }
 
       // List view
+      // Cmd+, — the standard macOS "Preferences" shortcut — opens Settings.
+      if (metaOrCtrl && e.key === ',') {
+        e.preventDefault();
+        onOpenSettings();
+        return;
+      }
+
       if (metaOrCtrl && /^[1-9]$/.test(e.key)) {
         const idx = parseInt(e.key, 10) - 1;
         if (navList[idx]) {
@@ -322,6 +329,7 @@ export default function CommandPalette({
     handleRegenerate,
     backToList,
     onClose,
+    onOpenSettings,
     streaming,
   ]);
 
@@ -512,7 +520,7 @@ export default function CommandPalette({
           <span className="brand-dot" /> AI Buddy
         </span>
         <span className="topbar-spacer" />
-        <button className="icon-btn no-drag" onClick={onOpenSettings} title="Settings" aria-label="Settings">
+        <button className="icon-btn no-drag" onClick={onOpenSettings} title={`Settings (${mod},)`} aria-label="Settings">
           <GearGlyph />
         </button>
         <button className="icon-btn no-drag" onClick={onClose} title="Close (Esc)" aria-label="Close">
@@ -598,6 +606,9 @@ export default function CommandPalette({
         </span>
         <span className="footer-hint">
           <kbd>↵</kbd> run
+        </span>
+        <span className="footer-hint">
+          <kbd>{mod},</kbd> settings
         </span>
         <span className="footer-hint">
           <kbd>esc</kbd> close

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { AppSettings } from '../shared/types';
 import { CloseGlyph } from './icons';
 import AiProviderForm from './settings/AiProviderForm';
@@ -32,10 +32,32 @@ export default function Settings({ settings, onSave, onBack, onClose }: Settings
     [onSave]
   );
 
+  // Escape returns to the main page. While typing in a field, the first Escape
+  // blurs that field (so it doesn't navigate away mid-edit); a second one then
+  // goes back — mirroring the command palette's two-stage Escape.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      const isField =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT';
+      e.preventDefault();
+      if (isField) {
+        target?.blur();
+      } else {
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onBack]);
+
   return (
     <div className="surface settings">
       <div className="topbar drag" data-tauri-drag-region>
-        <button className="icon-btn" onClick={onBack} title="Back" aria-label="Back">
+        <button className="icon-btn" onClick={onBack} title="Back (Esc)" aria-label="Back">
           ←
         </button>
         <span className="topbar-title">Settings</span>
