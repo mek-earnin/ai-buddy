@@ -157,6 +157,89 @@ fn compute_window_position(window: &tauri::WebviewWindow) -> Option<(f64, f64)> 
     Some((x, y))
 }
 
+/// Set the window's top-left corner natively, in one synchronous AppKit call.
+///
+/// `(x, y)` is the top-left in Quartz global points (origin at the top-left of
+/// the primary display, y growing downward) — the same space the cursor is read
+/// in. `setFrameTopLeftPoint:` wants the top-left in Cocoa screen coordinates
+/// (origin at the bottom-left of the primary display, y growing upward), so we
+/// flip Y about the primary display height.
+///
+/// Going native (vs. tao's `set_position`) matters because the frame change is
+/// applied immediately and synchronously: when paired with `show()` in the same
+/// main-thread turn, the window is never ordered on screen at its previous frame
+/// (e.g. the other monitor it was last shown on) before the move lands. Returns
+/// `false` if the native window handle is unavailable so the caller can fall
+/// back to `set_position`.
+#[cfg(target_os = "macos")]
+fn set_frame_top_left(window: &tauri::WebviewWindow, x: f64, y: f64) -> bool {
+    use core_graphics::display::CGDisplay;
+    use objc2::runtime::AnyObject;
+    use objc2::{msg_send, Encode, Encoding};
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct NSPoint {
+        x: f64,
+        y: f64,
+    }
+    unsafe impl Encode for NSPoint {
+        const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+    }
+
+    let Ok(ns_window) = window.ns_window() else {
+        return false;
+    };
+    let ns_window = ns_window as *mut AnyObject;
+    if ns_window.is_null() {
+        return false;
+    }
+
+    let primary_h = CGDisplay::main().bounds().size.height;
+    let point = NSPoint {
+        x,
+        y: primary_h - y,
+    };
+    unsafe {
+        let _: () = msg_send![ns_window, setFrameTopLeftPoint: point];
+    }
+    true
+}
+
+/// Position (if a target is known), show and focus the palette in a single
+/// main-thread turn.
+///
+/// Behaviour depends on whether the window is already on screen:
+/// - Already visible: just move it to the new position and refocus. No hide/show
+///   cycle, so it warps in place rather than blinking closed/open. (The caller
+///   still re-emits `selected-text` so the new selection populates.)
+/// - Hidden: set the frame first (while offscreen), then show — so it appears
+///   directly at the target instead of presenting at its last frame and warping.
+///
+/// On macOS the frame is set natively for immediacy; other platforms fall back
+/// to tao's `set_position`.
+fn position_and_show(window: &tauri::WebviewWindow, position: Option<(f64, f64)>) {
+    let already_visible = window.is_visible().unwrap_or(false);
+
+    if let Some((x, y)) = position {
+        #[cfg(target_os = "macos")]
+        {
+            if !set_frame_top_left(window, x, y) {
+                let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+        }
+    }
+
+    if !already_visible {
+        let _ = window.show();
+    }
+    let _ = window.set_focus();
+}
+
 /// Capture the current selection + frontmost target, then position, show and
 /// focus the palette window.
 ///
@@ -187,11 +270,7 @@ pub fn show_tool_palette(app: &AppHandle) {
         let text = capture.text;
         let editable = capture.editable;
         let _ = window.run_on_main_thread(move || {
-            if let Some((x, y)) = position {
-                let _ = win.set_position(tauri::LogicalPosition::new(x, y));
-            }
-            let _ = win.show();
-            let _ = win.set_focus();
+            position_and_show(&win, position);
             let _ = win.emit("selected-text", SelectedTextPayload { text, editable });
         });
     }
@@ -293,6 +372,18 @@ pub fn run() {
                     // corners. Clipping the content view rounds the webview and the
                     // vibrancy together for clean, native-looking corners.
                     round_window_corners(&window, WINDOW_RADIUS);
+
+                    // Realize the window once, offscreen, so the first
+                    // shortcut-driven open lands at the cursor instead of warping.
+                    // A freshly-created NSWindow buffers set_position until it's
+                    // first ordered on screen — so the very first open would flash
+                    // at the default (center) frame for a frame before the move
+                    // lands. Ordering it on/off screen here (far offscreen, never
+                    // presented) pays that one-time realization cost while hidden,
+                    // so every real open positions synchronously.
+                    let _ = window.set_position(tauri::LogicalPosition::new(-32000.0, -32000.0));
+                    let _ = window.show();
+                    let _ = window.hide();
                 }
 
                 // Keep the app alive in the tray when the window is closed.
