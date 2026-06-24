@@ -33,16 +33,19 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
-    let mut builder = TrayIconBuilder::new()
+    // Monochrome menu-bar glyph. `icon_as_template` lets macOS recolor it for
+    // light/dark menu bars via its alpha channel (the full-color app icon would
+    // just sit there colored and look out of place in the bar).
+    let tray_icon = tauri::include_image!("icons/tray-template.png");
+
+    TrayIconBuilder::new()
         .tooltip("AI Buddy")
+        .icon(tray_icon)
+        .icon_as_template(true)
         .menu(&menu)
-        .on_menu_event(|app, event| handle_menu_event(app, event.id.as_ref()));
+        .on_menu_event(|app, event| handle_menu_event(app, event.id.as_ref()))
+        .build(app)?;
 
-    if let Some(icon) = app.default_window_icon().cloned() {
-        builder = builder.icon(icon);
-    }
-
-    builder.build(app)?;
     Ok(())
 }
 
