@@ -1,6 +1,6 @@
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -55,11 +55,7 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
             crate::show_tool_palette(app);
         }
         "settings" => {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-                let _ = window.emit("show-settings", ());
-            }
+            crate::show_settings(app);
         }
         "permissions" => {
             let app_handle = app.clone();

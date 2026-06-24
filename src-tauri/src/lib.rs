@@ -206,6 +206,28 @@ fn set_frame_top_left(window: &tauri::WebviewWindow, x: f64, y: f64) -> bool {
     true
 }
 
+/// Bring our process to the foreground.
+///
+/// The app runs as an `Accessory` (menu-bar only, no Dock tile). Clicking a
+/// status-bar menu item does NOT activate the owning app, so `show()` +
+/// `set_focus()` alone often order the window in *behind* the currently-active
+/// app — it's technically visible but hidden under another window, which reads
+/// as "nothing happened" and is why repeated clicks were needed. Explicitly
+/// activating the app forces the freshly-shown window to the front.
+#[cfg(target_os = "macos")]
+fn activate_app() {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+
+    unsafe {
+        let ns_app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        if ns_app.is_null() {
+            return;
+        }
+        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+    }
+}
+
 /// Position (if a target is known), show and focus the palette in a single
 /// main-thread turn.
 ///
@@ -237,7 +259,28 @@ fn position_and_show(window: &tauri::WebviewWindow, position: Option<(f64, f64)>
     if !already_visible {
         let _ = window.show();
     }
+    // Activate before focusing: as an Accessory app we're not frontmost when
+    // triggered from the menu bar or a global shortcut, and a bare set_focus()
+    // can leave the window ordered behind the active app.
+    #[cfg(target_os = "macos")]
+    activate_app();
     let _ = window.set_focus();
+}
+
+/// Position the main window near the cursor, show and focus it, then ask the
+/// frontend to switch to the Settings view.
+///
+/// Shares the palette's positioning/show path so the window lands on screen —
+/// it would otherwise show at its last (offscreen) realize position.
+pub fn show_settings(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let position = compute_window_position(&window);
+        let win = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            position_and_show(&win, position);
+            let _ = win.emit("show-settings", ());
+        });
+    }
 }
 
 /// Capture the current selection + frontmost target, then position, show and
