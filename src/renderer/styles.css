@@ -27,10 +27,49 @@
   --radius-xs: 6px;
 
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+
+  --scrollbar: rgba(255, 255, 255, 0.12);
+  --scrollbar-hover: rgba(255, 255, 255, 0.2);
+
   --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --t-fast: 110ms ease;
+
+  /* Let the engine theme native widgets (select popup, autofill, fallback
+     scrollbars) to match the active appearance. */
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Light theme palette - matches Raycast aesthetic */
+    --bg: #ffffff;
+    --surface: rgba(255, 255, 255, 0.72);
+    --surface-2: rgba(0, 0, 0, 0.04);
+    --surface-3: rgba(0, 0, 0, 0.08);
+    --border: rgba(0, 0, 0, 0.06);
+    --border-strong: rgba(0, 0, 0, 0.12);
+
+    --text: #262626;
+    --text-dim: #717171;
+    --text-faint: #999999;
+
+    /* macOS system blue (light appearance) — Apple counterpart to the dark
+       #0a84ff used above. */
+    --accent: #007aff;
+    --accent-strong: #0064e1;
+    --accent-soft: rgba(0, 122, 255, 0.12);
+    --accent-line: rgba(0, 122, 255, 0.45);
+
+    --danger: #ff3b30;
+    --ok: #34c759;
+
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+    --scrollbar: rgba(0, 0, 0, 0.18);
+    --scrollbar-hover: rgba(0, 0, 0, 0.28);
+  }
 }
 
 * {
@@ -274,7 +313,7 @@ button {
 }
 
 .cmd-row.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
 }
 
 .cmd-icon {
@@ -486,7 +525,7 @@ kbd {
 }
 
 .btn kbd {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--surface-3);
   border-color: transparent;
   color: inherit;
   opacity: 0.85;
@@ -509,7 +548,7 @@ kbd {
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
   color: var(--text);
 }
 
@@ -580,8 +619,8 @@ kbd {
 
 /* ---------- Error ---------- */
 .error-card {
-  background: rgba(242, 114, 140, 0.08);
-  border: 1px solid rgba(242, 114, 140, 0.25);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
 }
@@ -952,7 +991,7 @@ kbd {
 
 .status-dot.connected {
   background: var(--ok);
-  box-shadow: 0 0 6px rgba(91, 208, 138, 0.4);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 40%, transparent);
 }
 
 .status-dot.disconnected {
@@ -1075,7 +1114,7 @@ kbd {
 }
 
 .stepper-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-2);
   color: var(--text);
 }
 
@@ -1108,7 +1147,7 @@ kbd {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-sunken, rgba(0, 0, 0, 0.25));
+  background: var(--surface-2);
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.5;
@@ -1155,14 +1194,14 @@ kbd {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scrollbar);
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 
