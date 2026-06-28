@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { AIProvider, AppSettings, PROVIDERS, LOCAL_CLI_TEMPLATES } from '../../shared/types';
-import { checkOllama, checkCustom, checkOmlx } from '../../shared/ai-service';
+import { checkOllama, checkCustom, checkOmlx, checkOpenAi } from '../../shared/ai-service';
 import { ChevronGlyph, RefreshGlyph } from '../icons';
 import CollapsibleSection from './CollapsibleSection';
 
@@ -14,6 +14,8 @@ export type AiProviderSettings = Pick<
   | 'omlxApiKey'
   | 'ollamaServerUrl'
   | 'ollamaModel'
+  | 'openaiApiKey'
+  | 'openaiModel'
   | 'localCliCommand'
   | 'localCliTimeoutSecs'
   | 'customApiEndpoint'
@@ -51,6 +53,8 @@ const pickSlice = (s: AiProviderSettings): AiProviderSettings => ({
   omlxApiKey: s.omlxApiKey,
   ollamaServerUrl: s.ollamaServerUrl,
   ollamaModel: s.ollamaModel,
+  openaiApiKey: s.openaiApiKey,
+  openaiModel: s.openaiModel,
   localCliCommand: s.localCliCommand,
   localCliTimeoutSecs: s.localCliTimeoutSecs,
   customApiEndpoint: s.customApiEndpoint,
@@ -68,6 +72,7 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
   const [form, setForm] = useState<AiProviderSettings>(() => pickSlice(settings));
   const [editingServer, setEditingServer] = useState(false);
   const [omlxModels, setOmlxModels] = useState<string[]>([]);
+  const [openaiModels, setOpenaiModels] = useState<string[]>([]);
   const [autoSave, setAutoSave] = useState<AutoSaveState>('idle');
   // Streamed stdout from the last "Test command" run (null = never run yet).
   const [localCliOutput, setLocalCliOutput] = useState<string | null>(null);
@@ -75,12 +80,14 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
   const [status, setStatus] = useState<Record<AIProvider, ConnStatus>>({
     omlx: 'unknown',
     ollama: 'unknown',
+    openai: 'unknown',
     'local-cli': 'unknown',
     custom: 'unknown',
   });
   const [errors, setErrors] = useState<Record<AIProvider, string>>({
     omlx: '',
     ollama: '',
+    openai: '',
     'local-cli': '',
     custom: '',
   });
@@ -118,6 +125,8 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
     form.omlxApiKey,
     form.ollamaServerUrl,
     form.ollamaModel,
+    form.openaiApiKey,
+    form.openaiModel,
     form.localCliCommand,
     form.localCliTimeoutSecs,
     form.customApiEndpoint,
@@ -153,6 +162,21 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
         setProviderStatus('ollama', 'disconnected', result.error || 'Connection failed');
         return false;
       }
+      if (p === 'openai') {
+        const result = await checkOpenAi(form.openaiApiKey);
+        if (result.ok) {
+          setOpenaiModels(result.models);
+          // Default to the fastest-responding model (first in the list).
+          if (result.models.length && !form.openaiModel.trim()) {
+            patch({ openaiModel: result.models[0] });
+          }
+          setProviderStatus('openai', 'connected');
+          return true;
+        }
+        setOpenaiModels([]);
+        setProviderStatus('openai', 'disconnected', result.error || 'Connection failed');
+        return false;
+      }
       if (p === 'custom') {
         const result = await checkCustom(form.customApiEndpoint, form.customModel, form.customApiKey);
         if (result.ok) {
@@ -177,6 +201,8 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
       form.omlxModel,
       form.omlxApiKey,
       form.ollamaServerUrl,
+      form.openaiApiKey,
+      form.openaiModel,
       form.customApiEndpoint,
       form.customModel,
       form.customApiKey,
@@ -254,6 +280,10 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
     form.omlxModel.trim() && !omlxModels.includes(form.omlxModel.trim())
       ? [form.omlxModel.trim(), ...omlxModels]
       : omlxModels;
+  const openaiModelOptions =
+    form.openaiModel.trim() && !openaiModels.includes(form.openaiModel.trim())
+      ? [form.openaiModel.trim(), ...openaiModels]
+      : openaiModels;
 
   return (
     <CollapsibleSection
@@ -411,6 +441,67 @@ export default function AiProviderForm({ settings, onSave }: AiProviderFormProps
               )}
               {status.ollama === 'disconnected' && errors.ollama && (
                 <span className="hint error-hint">{errors.ollama}</span>
+              )}
+            </div>
+          )}
+
+          {form.provider === 'openai' && (
+            <div className="provider-config">
+              <div className="form-group">
+                <label>API Key</label>
+                <input
+                  type="password"
+                  value={form.openaiApiKey}
+                  onChange={(e) => patch({ openaiApiKey: e.target.value })}
+                  placeholder="sk-…"
+                  spellCheck={false}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Model</label>
+                {openaiModelOptions.length > 0 ? (
+                  <div className="select-wrap full">
+                    <select
+                      className="provider-select"
+                      value={form.openaiModel}
+                      onChange={(e) => patch({ openaiModel: e.target.value })}
+                    >
+                      {openaiModelOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronGlyph />
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={form.openaiModel}
+                    onChange={(e) => patch({ openaiModel: e.target.value })}
+                    placeholder="Auto-selects the fastest model when connected"
+                    spellCheck={false}
+                  />
+                )}
+                <span className="hint">
+                  Connect to load your models — the fastest-responding one is selected by default.
+                  Models are ordered fastest-first.
+                </span>
+              </div>
+
+              <div className="form-actions">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => verifyProvider('openai')}
+                  disabled={status.openai === 'checking'}
+                >
+                  {status.openai === 'checking' ? 'Verifying…' : 'Verify connection'}
+                </button>
+                {status.openai === 'connected' && <span className="saved-indicator">Verified!</span>}
+              </div>
+              {status.openai === 'disconnected' && errors.openai && (
+                <span className="hint error-hint">{errors.openai}</span>
               )}
             </div>
           )}

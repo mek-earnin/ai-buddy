@@ -23,6 +23,8 @@ function aiConfig(s: AppSettings): AIServiceConfig {
     omlxApiKey: s.omlxApiKey,
     ollamaServerUrl: s.ollamaServerUrl,
     ollamaModel: s.ollamaModel,
+    openaiApiKey: s.openaiApiKey,
+    openaiModel: s.openaiModel,
     customApiEndpoint: s.customApiEndpoint,
     customModel: s.customModel,
     customApiKey: s.customApiKey,
