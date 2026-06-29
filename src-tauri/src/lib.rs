@@ -455,7 +455,8 @@ pub fn run() {
             commands::open_external,
             commands::get_clipboard_text,
             commands::run_local_cli,
-            commands::check_local_cli
+            commands::check_local_cli,
+            commands::http_probe
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

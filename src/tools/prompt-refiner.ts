@@ -5,7 +5,7 @@ Rules:
 - Do the work for the user: actively infer intent and fill in missing pieces (goal, relevant context, constraints, expected output format, and acceptance criteria) using reasonable, conventional assumptions. Do NOT ask the user questions or push context-gathering back onto them.
 - Prefer a confident, reasonable assumption over a placeholder. Only insert a "[TODO: ...]" placeholder as a last resort, when a specific value is genuinely required and cannot reasonably be inferred (for example a unique identifier, secret, or exact file path). Keep placeholders to a minimum.
 - Stay faithful to the original intent and scope. Do not add unrelated requirements.
-- Keep the same language as the input (if the input is in Thai, respond in Thai, etc.).
+- Always respond in the exact same language as the input text. Never translate or switch languages.
 - Output ONLY the rewritten prompt, with no commentary, preamble, or explanation.`;
 
 export function buildPromptRefinerPrompt(): string {

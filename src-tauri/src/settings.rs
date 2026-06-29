@@ -42,6 +42,10 @@ pub struct AppSettings {
     pub ollama_server_url: String,
     pub ollama_model: String,
 
+    // OpenAI (api.openai.com — OpenAI-compatible, /v1/chat/completions)
+    pub openai_api_key: String,
+    pub openai_model: String,
+
     // Local CLI
     pub local_cli_command: String,
     pub local_cli_timeout_secs: u64,
@@ -70,6 +74,8 @@ impl Default for AppSettings {
             omlx_api_key: String::new(),
             ollama_server_url: "http://localhost:11434".to_string(),
             ollama_model: String::new(),
+            openai_api_key: String::new(),
+            openai_model: String::new(),
             local_cli_command: String::new(),
             local_cli_timeout_secs: 45,
             custom_api_endpoint: "http://localhost:11434/api/chat".to_string(),
@@ -193,6 +199,7 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
     };
 
     settings.omlx_api_key = read_secret(app, "omlxApiKey");
+    settings.openai_api_key = read_secret(app, "openaiApiKey");
     settings.custom_api_key = read_secret(app, "customApiKey");
     settings.jira_api_token = read_secret(app, "jiraApiToken");
     settings.github_token = read_secret(app, "githubToken");
@@ -204,12 +211,14 @@ pub fn load_settings(app: &AppHandle) -> AppSettings {
 /// write the non-secret fields to JSON with the secret fields blanked out.
 pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
     write_secret(app, "omlxApiKey", &settings.omlx_api_key);
+    write_secret(app, "openaiApiKey", &settings.openai_api_key);
     write_secret(app, "customApiKey", &settings.custom_api_key);
     write_secret(app, "jiraApiToken", &settings.jira_api_token);
     write_secret(app, "githubToken", &settings.github_token);
 
     let mut to_store = settings.clone();
     to_store.omlx_api_key = String::new();
+    to_store.openai_api_key = String::new();
     to_store.custom_api_key = String::new();
     to_store.jira_api_token = String::new();
     to_store.github_token = String::new();

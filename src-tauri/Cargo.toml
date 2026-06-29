@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "2.0.0"
+version = "2.1.0"
 description = "Developer productivity tray app"
 authors = ["Mek"]
 license = "MIT"
@@ -24,7 +24,18 @@ log = "0.4"
 tauri = { version = "2.11.3", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-log = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-http = "2"
+# Use native-tls (macOS Secure Transport) instead of the default rustls/webpki
+# roots so HTTPS trusts the system keychain — including corporate MITM proxy
+# root CAs. With rustls' bundled roots, those re-signed certs fail as
+# "invalid peer certificate: UnknownIssuer". native-tls-alpn keeps HTTP/2.
+tauri-plugin-http = { version = "2", default-features = false, features = [
+    "native-tls",
+    "native-tls-alpn",
+    "http2",
+    "charset",
+    "macos-system-configuration",
+    "cookies",
+] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 window-vibrancy = "0.6"

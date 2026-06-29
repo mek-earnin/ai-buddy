@@ -1,4 +1,4 @@
-export type AIProvider = 'omlx' | 'ollama' | 'local-cli' | 'custom';
+export type AIProvider = 'omlx' | 'ollama' | 'openai' | 'local-cli' | 'custom';
 
 export type ToneId = 'professional' | 'friendly' | 'direct';
 
@@ -28,6 +28,10 @@ export interface AppSettings {
   // Ollama
   ollamaServerUrl: string;
   ollamaModel: string;
+
+  // OpenAI (api.openai.com — OpenAI-compatible, /v1/chat/completions)
+  openaiApiKey: string;
+  openaiModel: string;
 
   // Local CLI
   localCliCommand: string;
@@ -63,6 +67,7 @@ export interface ProviderInfo {
 export const PROVIDERS: ProviderInfo[] = [
   { id: 'omlx', label: 'oMLX' },
   { id: 'ollama', label: 'Ollama' },
+  { id: 'openai', label: 'OpenAI' },
   { id: 'local-cli', label: 'Local CLI' },
   { id: 'custom', label: 'Custom' },
 ];
@@ -110,6 +115,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   ollamaServerUrl: 'http://localhost:11434',
   ollamaModel: '',
+
+  openaiApiKey: '',
+  openaiModel: '',
 
   localCliCommand: '',
   localCliTimeoutSecs: 45,

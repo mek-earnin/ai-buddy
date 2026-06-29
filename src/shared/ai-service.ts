@@ -1,5 +1,5 @@
 import { AIProvider } from './types';
-import { tauriFetch } from './http';
+import { tauriFetch, httpProbe } from './http';
 
 export interface AIServiceConfig {
   provider: AIProvider;
@@ -8,6 +8,8 @@ export interface AIServiceConfig {
   omlxApiKey: string;
   ollamaServerUrl: string;
   ollamaModel: string;
+  openaiApiKey: string;
+  openaiModel: string;
   customApiEndpoint: string;
   customModel: string;
   customApiKey: string;
@@ -35,7 +37,8 @@ export async function generateText(
  * full text. Powers the live "typing" result in the command palette.
  *
  * Note: `local-cli` is handled in the Tauri bridge (it spawns a process), so
- * this service only covers the HTTP providers (`ollama`, `custom`).
+ * this service only covers the HTTP providers (`omlx`, `ollama`, `openai`,
+ * `custom`).
  */
 export async function generateTextStream(
   systemPrompt: string,
@@ -48,11 +51,16 @@ export async function generateTextStream(
       return streamCustom(systemPrompt, userContent, config, onToken);
     case 'ollama':
       return streamOllama(systemPrompt, userContent, config, onToken);
+    case 'openai':
+      return streamOpenAi(systemPrompt, userContent, config, onToken);
     case 'omlx':
     default:
       return streamOmlx(systemPrompt, userContent, config, onToken);
   }
 }
+
+/** Base URL for the hosted OpenAI API (OpenAI-compatible, /v1/...). */
+export const OPENAI_BASE_URL = 'https://api.openai.com';
 
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
@@ -79,6 +87,29 @@ async function responseDetail(res: Response): Promise<string> {
     return text ? `${status}: ${text.slice(0, 400)}` : status;
   } catch {
     return status;
+  }
+}
+
+/**
+ * Issue a connection-check request via the Rust `http_probe` command (which
+ * surfaces the real transport-error cause) and parse the JSON body. Throws with
+ * `HTTP <status>: <body>` on a non-2xx response, and propagates the detailed
+ * network-error string on transport failure.
+ */
+async function probeJson(
+  url: string,
+  options?: { method?: 'GET' | 'POST' | 'PUT'; apiKey?: string; body?: string }
+): Promise<any> {
+  const { status, body } = await httpProbe(url, options);
+  if (status < 200 || status >= 300) {
+    const detail = body.trim().slice(0, 400);
+    throw new Error(`HTTP ${status}${detail ? `: ${detail}` : ''}`);
+  }
+  if (!body.trim()) return null;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
   }
 }
 
@@ -158,11 +189,7 @@ function parseOpenAiLine(line: string): string | null {
 
 async function fetchOllamaModels(serverUrl: string): Promise<string[]> {
   const base = trimTrailingSlash(serverUrl);
-  const res = await tauriFetch(`${base}/api/tags`, { method: 'GET' });
-  if (!res.ok) {
-    throw new Error(await responseDetail(res));
-  }
-  const data = await res.json();
+  const data = await probeJson(`${base}/api/tags`);
   const models = Array.isArray(data?.models) ? data.models : [];
   return models.map((m: any) => m?.name).filter((n: any): n is string => !!n);
 }
@@ -266,14 +293,7 @@ function omlxHeaders(apiKey: string): Record<string, string> {
 /** List models from an oMLX (OpenAI-compatible) server via GET /v1/models. */
 async function fetchOmlxModels(serverUrl: string, apiKey: string): Promise<string[]> {
   const base = trimTrailingSlash(serverUrl);
-  const res = await tauriFetch(`${base}/v1/models`, {
-    method: 'GET',
-    headers: omlxHeaders(apiKey),
-  });
-  if (!res.ok) {
-    throw new Error(await responseDetail(res));
-  }
-  const data = await res.json();
+  const data = await probeJson(`${base}/v1/models`, { apiKey });
   const models = Array.isArray(data?.data) ? data.data : [];
   return models.map((m: any) => m?.id).filter((id: any): id is string => !!id);
 }
@@ -324,6 +344,122 @@ async function streamOmlx(
   return full.trim();
 }
 
+// ---------- OpenAI (hosted api.openai.com) ----------
+
+/** Bearer auth headers for OpenAI requests (the API key is required). */
+function openAiHeaders(apiKey: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey.trim()}`,
+  };
+}
+
+/**
+ * Substrings that mark a model as NOT a text-chat model (audio, vision-only,
+ * embeddings, image, moderation, etc.). These are excluded from selection.
+ */
+const OPENAI_NON_CHAT_MARKERS = [
+  'embedding',
+  'whisper',
+  'tts',
+  'audio',
+  'realtime',
+  'transcribe',
+  'image',
+  'dall-e',
+  'moderation',
+  'search',
+  'codex',
+];
+
+function isOpenAiChatModel(id: string): boolean {
+  const lower = id.toLowerCase();
+  if (OPENAI_NON_CHAT_MARKERS.some((m) => lower.includes(m))) return false;
+  // Chat-capable families: gpt-*, and reasoning models (o1/o3/o4...).
+  return lower.startsWith('gpt') || /^o\d/.test(lower) || lower.startsWith('chatgpt');
+}
+
+/**
+ * Rough latency rank for an OpenAI model — lower is faster to respond. The
+ * lightweight "nano"/"mini" tiers stream first tokens fastest; reasoning
+ * models ("o1", "o3", …) are the slowest because they think before answering.
+ * Used to pick a sensible default model automatically.
+ */
+function openAiSpeedRank(id: string): number {
+  const lower = id.toLowerCase();
+  if (/^o\d/.test(lower)) return 5; // reasoning models — slowest
+  if (lower.includes('nano')) return 0;
+  if (lower.includes('mini')) return 1;
+  if (lower.includes('turbo')) return 2;
+  return 3;
+}
+
+/**
+ * Pick the fastest-responding chat model from a list returned by the API.
+ * Filters to chat-capable models, then sorts by latency rank (preserving the
+ * API's order on ties). Returns null when no chat model is available.
+ */
+export function pickFastestOpenAiModel(models: string[]): string | null {
+  const chat = models.filter(isOpenAiChatModel);
+  if (!chat.length) return null;
+  return chat
+    .map((id, index) => ({ id, index, rank: openAiSpeedRank(id) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)[0].id;
+}
+
+/** List models from the OpenAI API via GET /v1/models. */
+async function fetchOpenAiModels(apiKey: string): Promise<string[]> {
+  const data = await probeJson(`${OPENAI_BASE_URL}/v1/models`, { apiKey });
+  const models = Array.isArray(data?.data) ? data.data : [];
+  return models.map((m: any) => m?.id).filter((id: any): id is string => !!id);
+}
+
+async function resolveOpenAiModel(config: AIServiceConfig): Promise<string> {
+  if (config.openaiModel.trim()) return config.openaiModel.trim();
+  const models = await fetchOpenAiModels(config.openaiApiKey);
+  const fastest = pickFastestOpenAiModel(models);
+  if (!fastest) {
+    throw new Error('No OpenAI chat models available for this API key.');
+  }
+  return fastest;
+}
+
+async function streamOpenAi(
+  systemPrompt: string,
+  userContent: string,
+  config: AIServiceConfig,
+  onToken: TokenHandler
+): Promise<string> {
+  if (!config.openaiApiKey.trim()) {
+    throw new Error('OpenAI API key not configured. Set it in Settings.');
+  }
+
+  const model = await resolveOpenAiModel(config);
+
+  const res = await tauriFetch(`${OPENAI_BASE_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: openAiHeaders(config.openaiApiKey),
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OpenAI request failed — ${await responseDetail(res)}`);
+  }
+
+  const full = await consumeStream(res, parseOpenAiLine, onToken);
+  if (!full.trim()) {
+    throw new Error('No response from OpenAI');
+  }
+  return full.trim();
+}
+
 // ---------- Connection checks (used by Settings) ----------
 
 export interface OmlxCheckResult {
@@ -359,6 +495,31 @@ export async function checkOllama(serverUrl: string): Promise<OllamaCheckResult>
   }
 }
 
+export interface OpenAiCheckResult {
+  ok: boolean;
+  models: string[];
+  error?: string;
+}
+
+/**
+ * Verify the OpenAI API key by listing available models. Returns only the
+ * chat-capable models, ordered fastest-first so the caller can default to the
+ * quickest-responding one.
+ */
+export async function checkOpenAi(apiKey: string): Promise<OpenAiCheckResult> {
+  if (!apiKey.trim()) return { ok: false, models: [], error: 'API key is required' };
+  try {
+    const all = await fetchOpenAiModels(apiKey);
+    const fastest = pickFastestOpenAiModel(all);
+    const chat = all.filter(isOpenAiChatModel);
+    // Surface the fastest model first; keep the rest in API order.
+    const ordered = fastest ? [fastest, ...chat.filter((m) => m !== fastest)] : chat;
+    return { ok: true, models: ordered };
+  } catch (err) {
+    return { ok: false, models: [], error: errorDetail(err) };
+  }
+}
+
 export interface CustomCheckResult {
   ok: boolean;
   error?: string;
@@ -377,12 +538,9 @@ export async function checkCustom(
   if (!model.trim()) return { ok: false, error: 'Model name is required' };
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
-
-    const res = await tauriFetch(endpoint.trim(), {
+    const { status, body } = await httpProbe(endpoint.trim(), {
       method: 'POST',
-      headers,
+      apiKey: apiKey.trim() || undefined,
       body: JSON.stringify({
         model: model.trim(),
         messages: [{ role: 'user', content: 'ping' }],
@@ -390,8 +548,9 @@ export async function checkCustom(
       }),
     });
 
-    if (!res.ok) {
-      return { ok: false, error: await responseDetail(res) };
+    if (status < 200 || status >= 300) {
+      const detail = body.trim().slice(0, 400);
+      return { ok: false, error: `HTTP ${status}${detail ? `: ${detail}` : ''}` };
     }
     return { ok: true };
   } catch (err) {

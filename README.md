@@ -74,8 +74,8 @@ AIBuddy launches into the menu bar — there is no main window until you press t
 ### Configuration
 
 On first launch, click the tray icon → Settings to configure:
-- AI Provider (OpenAI or Anthropic)
-- API Key
+- AI Provider (oMLX, Ollama, OpenAI, Local CLI, or a Custom OpenAI-compatible endpoint)
+- API Key (for OpenAI, paste your `sk-…` key; the fastest-responding model is selected automatically)
 - Model selection
 - Custom keyboard shortcut
 
