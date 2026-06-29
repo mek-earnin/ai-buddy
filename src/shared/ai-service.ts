@@ -1,5 +1,5 @@
 import { AIProvider } from './types';
-import { tauriFetch } from './http';
+import { tauriFetch, httpProbe } from './http';
 
 export interface AIServiceConfig {
   provider: AIProvider;
@@ -90,6 +90,29 @@ async function responseDetail(res: Response): Promise<string> {
   }
 }
 
+/**
+ * Issue a connection-check request via the Rust `http_probe` command (which
+ * surfaces the real transport-error cause) and parse the JSON body. Throws with
+ * `HTTP <status>: <body>` on a non-2xx response, and propagates the detailed
+ * network-error string on transport failure.
+ */
+async function probeJson(
+  url: string,
+  options?: { method?: 'GET' | 'POST' | 'PUT'; apiKey?: string; body?: string }
+): Promise<any> {
+  const { status, body } = await httpProbe(url, options);
+  if (status < 200 || status >= 300) {
+    const detail = body.trim().slice(0, 400);
+    throw new Error(`HTTP ${status}${detail ? `: ${detail}` : ''}`);
+  }
+  if (!body.trim()) return null;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
 /** Infer the chat wire format from an endpoint URL path. */
 function formatForEndpoint(endpoint: string): ChatFormat {
   return /\/api\/chat\b/.test(endpoint) ? 'ollama' : 'openai';
@@ -166,11 +189,7 @@ function parseOpenAiLine(line: string): string | null {
 
 async function fetchOllamaModels(serverUrl: string): Promise<string[]> {
   const base = trimTrailingSlash(serverUrl);
-  const res = await tauriFetch(`${base}/api/tags`, { method: 'GET' });
-  if (!res.ok) {
-    throw new Error(await responseDetail(res));
-  }
-  const data = await res.json();
+  const data = await probeJson(`${base}/api/tags`);
   const models = Array.isArray(data?.models) ? data.models : [];
   return models.map((m: any) => m?.name).filter((n: any): n is string => !!n);
 }
@@ -274,14 +293,7 @@ function omlxHeaders(apiKey: string): Record<string, string> {
 /** List models from an oMLX (OpenAI-compatible) server via GET /v1/models. */
 async function fetchOmlxModels(serverUrl: string, apiKey: string): Promise<string[]> {
   const base = trimTrailingSlash(serverUrl);
-  const res = await tauriFetch(`${base}/v1/models`, {
-    method: 'GET',
-    headers: omlxHeaders(apiKey),
-  });
-  if (!res.ok) {
-    throw new Error(await responseDetail(res));
-  }
-  const data = await res.json();
+  const data = await probeJson(`${base}/v1/models`, { apiKey });
   const models = Array.isArray(data?.data) ? data.data : [];
   return models.map((m: any) => m?.id).filter((id: any): id is string => !!id);
 }
@@ -397,14 +409,7 @@ export function pickFastestOpenAiModel(models: string[]): string | null {
 
 /** List models from the OpenAI API via GET /v1/models. */
 async function fetchOpenAiModels(apiKey: string): Promise<string[]> {
-  const res = await tauriFetch(`${OPENAI_BASE_URL}/v1/models`, {
-    method: 'GET',
-    headers: openAiHeaders(apiKey),
-  });
-  if (!res.ok) {
-    throw new Error(await responseDetail(res));
-  }
-  const data = await res.json();
+  const data = await probeJson(`${OPENAI_BASE_URL}/v1/models`, { apiKey });
   const models = Array.isArray(data?.data) ? data.data : [];
   return models.map((m: any) => m?.id).filter((id: any): id is string => !!id);
 }
@@ -533,12 +538,9 @@ export async function checkCustom(
   if (!model.trim()) return { ok: false, error: 'Model name is required' };
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
-
-    const res = await tauriFetch(endpoint.trim(), {
+    const { status, body } = await httpProbe(endpoint.trim(), {
       method: 'POST',
-      headers,
+      apiKey: apiKey.trim() || undefined,
       body: JSON.stringify({
         model: model.trim(),
         messages: [{ role: 'user', content: 'ping' }],
@@ -546,8 +548,9 @@ export async function checkCustom(
       }),
     });
 
-    if (!res.ok) {
-      return { ok: false, error: await responseDetail(res) };
+    if (status < 200 || status >= 300) {
+      const detail = body.trim().slice(0, 400);
+      return { ok: false, error: `HTTP ${status}${detail ? `: ${detail}` : ''}` };
     }
     return { ok: true };
   } catch (err) {

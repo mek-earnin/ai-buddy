@@ -13,6 +13,80 @@ use crate::selection;
 use crate::settings::{self, AppSettings};
 use crate::PrevApp;
 
+/// Flatten an error and its full `source()` chain into one readable string.
+///
+/// The Tauri HTTP plugin surfaces transport failures as reqwest's generic
+/// top-level Display ("error sending request for url (...)") and drops the
+/// underlying cause. The real reason (DNS failure, TLS/cert error, connection
+/// refused, timeout) lives deeper in the source chain, so we walk it here and
+/// join the distinct messages — that's what makes the UI error actionable.
+fn format_error_chain(err: &dyn std::error::Error) -> String {
+    let mut parts: Vec<String> = vec![err.to_string()];
+    let mut source = err.source();
+    while let Some(cause) = source {
+        let msg = cause.to_string();
+        // Skip empties and consecutive duplicates (reqwest sometimes repeats).
+        if !msg.is_empty() && parts.last().map(|p| p != &msg).unwrap_or(true) {
+            parts.push(msg);
+        }
+        source = cause.source();
+    }
+    parts.join(": ")
+}
+
+/// Result of [`http_probe`]: the HTTP status plus the response body as text.
+#[derive(serde::Serialize)]
+pub struct HttpProbeResponse {
+    pub status: u16,
+    pub body: String,
+}
+
+/// Perform a one-shot HTTP request used by the Settings "Verify connection"
+/// checks, returning the status + body on a completed response, or a detailed
+/// error string (full source chain) when the request never completes.
+///
+/// This exists alongside the `@tauri-apps/plugin-http` fetch because that
+/// plugin collapses transport errors to reqwest's generic message; routing the
+/// connection checks through here surfaces the actual failure cause instead.
+#[tauri::command]
+pub async fn http_probe(
+    url: String,
+    method: Option<String>,
+    api_key: Option<String>,
+    body: Option<String>,
+) -> Result<HttpProbeResponse, String> {
+    use tauri_plugin_http::reqwest;
+
+    let client = reqwest::Client::new();
+    let method = method.unwrap_or_else(|| "GET".to_string());
+    let mut req = match method.to_ascii_uppercase().as_str() {
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        _ => client.get(&url),
+    };
+
+    if let Some(key) = api_key.as_deref() {
+        let key = key.trim();
+        if !key.is_empty() {
+            req = req.bearer_auth(key);
+        }
+    }
+
+    if let Some(payload) = body {
+        req = req
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(payload);
+    }
+
+    let res = req
+        .send()
+        .await
+        .map_err(|e| format_error_chain(&e))?;
+    let status = res.status().as_u16();
+    let body = res.text().await.map_err(|e| format_error_chain(&e))?;
+    Ok(HttpProbeResponse { status, body })
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<'_, Mutex<AppSettings>>) -> Result<AppSettings, String> {
     let guard = state.lock().map_err(|e| e.to_string())?;
