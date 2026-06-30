@@ -59,6 +59,13 @@ export interface GenerateRequest {
   userContent: string;
 }
 
+export interface UpdateStatus {
+  currentVersion: string;
+  available: boolean;
+  version?: string;
+  notes?: string;
+}
+
 export interface ProviderInfo {
   id: AIProvider;
   label: string;

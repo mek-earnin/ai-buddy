@@ -12,3 +12,11 @@ release/
 # Normally lives in the OS app-data dir, but ignore it anywhere just in case.
 dev-secrets.json
 *.p12
+
+# Tauri updater signing keys — must never be committed. The real key lives in
+# ~/.tauri/ (outside the repo); this guards against an accidental local copy.
+*.key
+*.key.pub
+
+# Local mock update server fixtures (scripts/test-update-ui.sh).
+.update-mock/

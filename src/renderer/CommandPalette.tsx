@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Action, GROUP_ORDER, ScoredAction, searchActions } from '../tools/actions';
-import { AppSettings } from '../shared/types';
+import { AppSettings, UpdateStatus } from '../shared/types';
 import { CloseGlyph, GearGlyph } from './icons';
 
 interface CommandPaletteProps {
   selectedText: string;
   targetEditable: boolean;
   settings: AppSettings;
+  appVersion: string;
+  update: UpdateStatus | null;
+  onInstallUpdate: () => void;
   onOpenSettings: () => void;
   onClose: () => void;
 }
@@ -47,6 +50,9 @@ export default function CommandPalette({
   selectedText,
   targetEditable,
   settings,
+  appVersion,
+  update,
+  onInstallUpdate,
   onOpenSettings,
   onClose,
 }: CommandPaletteProps) {
@@ -518,7 +524,18 @@ export default function CommandPalette({
       <div className="topbar drag" data-tauri-drag-region>
         <span className="brand">
           <span className="brand-dot" /> AI Buddy
+          {appVersion && <span className="brand-version">v{appVersion}</span>}
         </span>
+        {update?.available && update.version && (
+          <button
+            className="update-pill no-drag"
+            onClick={onInstallUpdate}
+            title={`AI Buddy ${update.version} is available — click to install`}
+          >
+            <span className="update-pill-dot" />
+            Update to v{update.version}
+          </button>
+        )}
         <span className="topbar-spacer" />
         <button className="icon-btn no-drag" onClick={onOpenSettings} title={`Settings (${mod},)`} aria-label="Settings">
           <GearGlyph />

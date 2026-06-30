@@ -17,6 +17,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let permissions =
         MenuItem::with_id(app, "permissions", "Permissions Help", true, None::<&str>)?;
     let logs = MenuItem::with_id(app, "logs", "Open Logs", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", "Check for Updates…", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
@@ -28,6 +29,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             &settings_item,
             &permissions,
             &logs,
+            &update,
             &sep2,
             &quit,
         ],
@@ -89,6 +91,9 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
             }
             Err(e) => settings::log(app, &format!("failed to resolve logs path: {e}")),
         },
+        "update" => {
+            crate::updater::check_for_updates(app, false);
+        }
         "quit" => {
             app.exit(0);
         }

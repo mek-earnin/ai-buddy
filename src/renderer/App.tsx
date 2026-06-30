@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import CommandPalette from './CommandPalette';
 import Settings from './Settings';
-import { AppSettings } from '../shared/types';
+import { AppSettings, UpdateStatus } from '../shared/types';
 
 type View = 'palette' | 'settings';
 
@@ -10,6 +10,8 @@ export default function App() {
   const [selectedText, setSelectedText] = useState('');
   const [targetEditable, setTargetEditable] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [appVersion, setAppVersion] = useState('');
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
   // Bumped every time the window is (re)shown. The webview is never torn down,
   // so we key the palette on this to force a fresh mount on each open — which
   // refocuses the search field and resets the palette to its initial view.
@@ -17,6 +19,12 @@ export default function App() {
 
   useEffect(() => {
     window.aibuddy.getSettings().then(setSettings);
+
+    // Show the installed version, and silently check for a newer one so the
+    // brand header can surface an "update available" badge. A failed check
+    // (e.g. no published manifest yet) just leaves the badge hidden.
+    window.aibuddy.getAppVersion().then(setAppVersion).catch(() => {});
+    window.aibuddy.fetchUpdateStatus().then(setUpdate).catch(() => {});
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'show-settings') {
@@ -65,6 +73,9 @@ export default function App() {
       selectedText={selectedText}
       targetEditable={targetEditable}
       settings={settings}
+      appVersion={appVersion}
+      update={update}
+      onInstallUpdate={() => window.aibuddy.installUpdate()}
       onOpenSettings={() => setView('settings')}
       onClose={handleClose}
     />

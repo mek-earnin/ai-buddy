@@ -2,6 +2,7 @@ mod commands;
 mod selection;
 mod settings;
 mod tray;
+mod updater;
 
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -360,6 +361,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -456,7 +458,10 @@ pub fn run() {
             commands::get_clipboard_text,
             commands::run_local_cli,
             commands::check_local_cli,
-            commands::http_probe
+            commands::http_probe,
+            updater::app_version,
+            updater::fetch_update_status,
+            updater::install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

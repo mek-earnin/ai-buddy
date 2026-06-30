@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AI Buddy",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "identifier": "com.mek-earnin.aibuddy",
   "build": {
     "frontendDist": "../dist",
@@ -34,6 +34,7 @@
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],
+    "createUpdaterArtifacts": true,
     "category": "Productivity",
     "icon": [
       "icons/32x32.png",
@@ -47,6 +48,14 @@
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/mek-earnin/ai-buddy/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERBNEI1OTNBQTM2OUREMTYKUldRVzNXbWpPbGxMMnIvRkwrbHRSYXFpamZEUDhsUGRHMEV3ZVlQV1MwYU9PNmJuVjN1TzdnNE0K"
     }
   }
 }

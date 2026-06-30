@@ -162,6 +162,67 @@ button {
   box-shadow: 0 0 10px var(--accent-line);
 }
 
+.brand-version {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-faint);
+  letter-spacing: 0;
+}
+
+/* "Update available" pill in the top bar. Interactive (overrides the drag
+   region) so a click installs rather than dragging the window. Amber, not the
+   app accent blue — warmer + higher contrast on the dark surface so it reads
+   as a call to action. */
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 196, 0, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 196, 0, 0.16);
+  color: #ffce47;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.update-pill:hover {
+  background: #ffc400;
+  border-color: #ffc400;
+  color: #1c1c1e;
+}
+
+@media (prefers-color-scheme: light) {
+  .update-pill {
+    border-color: rgba(176, 120, 0, 0.5);
+    background: rgba(255, 196, 0, 0.22);
+    color: #8a5a00;
+  }
+
+  .update-pill:hover {
+    background: #f5b300;
+    border-color: #f5b300;
+    color: #2a1d00;
+  }
+}
+
+.update-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: update-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes update-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .icon-btn {
   display: inline-flex;
   align-items: center;

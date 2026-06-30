@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { generateText, generateTextStream, AIServiceConfig, TokenHandler } from './ai-service';
 import { fetchJiraActivity } from './data-sources/jira';
 import { fetchGitHubActivity } from './data-sources/github';
-import { AppSettings, GenerateRequest } from './types';
+import { AppSettings, GenerateRequest, UpdateStatus } from './types';
 import { AppBridge } from './bridge';
 
 let cachedSettings: AppSettings | null = null;
@@ -134,6 +134,12 @@ const bridge: AppBridge = {
     const s = await ensureSettings();
     return fetchGitHubActivity({ token: s.githubToken });
   },
+
+  getAppVersion: () => invoke<string>('app_version'),
+
+  fetchUpdateStatus: () => invoke<UpdateStatus>('fetch_update_status'),
+
+  installUpdate: () => invoke('install_update'),
 };
 
 window.aibuddy = bridge;

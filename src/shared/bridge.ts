@@ -1,4 +1,4 @@
-import { AppSettings, GenerateRequest } from './types';
+import { AppSettings, GenerateRequest, UpdateStatus } from './types';
 import { JiraActivity } from './data-sources/jira';
 import { GitHubActivity } from './data-sources/github';
 
@@ -16,6 +16,9 @@ export interface AppBridge {
   openExternal: (url: string) => Promise<void>;
   fetchJiraActivity: () => Promise<JiraActivity>;
   fetchGitHubActivity: () => Promise<GitHubActivity>;
+  getAppVersion: () => Promise<string>;
+  fetchUpdateStatus: () => Promise<UpdateStatus>;
+  installUpdate: () => Promise<void>;
 }
 
 declare global {
