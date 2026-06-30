@@ -1,0 +1,23 @@
+{
+  "files": [
+    { "path": "package.json", "type": "json", "field": "version" },
+    { "path": "src-tauri/tauri.conf.json", "type": "json", "field": "version" },
+    { "path": "src-tauri/Cargo.toml", "type": "toml-package", "field": "version" },
+    { "path": "src-tauri/Cargo.lock", "type": "toml-lock", "field": "app" }
+  ],
+  "audit": {
+    "exclude": [
+      ".git",
+      "node_modules",
+      "dist",
+      "target",
+      "gen",
+      ".version-bump.json",
+      "package-lock.json",
+      "Cargo.lock",
+      "scripts",
+      ".update-mock",
+      ".playwright-cli"
+    ]
+  }
+}

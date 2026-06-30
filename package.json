@@ -14,7 +14,11 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "set -a; [ -f .env.local ] && . ./.env.local; set +a; tauri build --target aarch64-apple-darwin",
-    "tauri:mock-update:dev": "./scripts/test-update-ui.sh"
+    "tauri:mock-update:dev": "./scripts/test-update-ui.sh",
+    "version:check": "./scripts/bump-version.sh --check",
+    "version:audit": "./scripts/bump-version.sh --audit",
+    "version:bump": "./scripts/bump-version.sh",
+    "release": "./scripts/release.sh"
   },
   "keywords": [
     "developer",

@@ -10,10 +10,22 @@
 #   - Apple signing identity available; export APPLE_SIGNING_IDENTITY if your
 #     identity name differs from the build default.
 #
+# What it does:
+#   1. Resolves the version (or bumps + commits it when an arg is given).
+#   2. Builds the signed app + updater artifacts.
+#   3. Tags the released commit on the current branch and pushes branch + tag.
+#   4. Creates/updates the GitHub Release with the artifacts + latest.json.
+#
 # Usage:
 #   ./scripts/release.sh                 # version read from tauri.conf.json
-#   ./scripts/release.sh 2.2.0           # explicit version (also bumps files)
+#   ./scripts/release.sh 2.2.0           # bump + commit version, then release
+#   ./scripts/release.sh -f              # overwrite an existing tag/release
+#   ./scripts/release.sh 2.2.0 -f        # bump + overwrite
 #   RELEASE_NOTES="Fixes X, adds Y" ./scripts/release.sh
+#
+# By default the script refuses to release a version whose tag already exists
+# (local or on origin). Re-run with -f / --force to move the tag and overwrite
+# the release assets.
 #
 set -euo pipefail
 
@@ -31,25 +43,35 @@ cd "$ROOT_DIR"
 KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY_PATH:-$HOME/.tauri/ai-buddy-updater.key}"
 CONF="src-tauri/tauri.conf.json"
 
+# --- Parse args (positional version + optional -f/--force) -------------------
+FORCE=0
+VERSION_ARG=""
+for arg in "$@"; do
+  case "$arg" in
+    -f|--force) FORCE=1 ;;
+    -*) echo "ERROR: unknown flag '$arg'" >&2; exit 1 ;;
+    *) VERSION_ARG="$arg" ;;
+  esac
+done
+
+# `npm run release -f` is consumed by npm itself (it reads -f as --force) and
+# never reaches this script, but npm exposes it as npm_config_force=true.
+# Honor it so both `npm run release -f` and `npm run release -- -f` work.
+[[ "${npm_config_force:-}" == "true" ]] && FORCE=1
+
 # --- Resolve / bump version -------------------------------------------------
 read_version() { node -p "require('./$CONF').version"; }
 
-if [[ "${1:-}" != "" ]]; then
-  VERSION="$1"
-  echo "==> Bumping version to $VERSION in tauri.conf.json, package.json, Cargo.toml"
-  node -e '
-    const fs = require("fs");
-    const v = process.argv[1];
-    for (const f of ["src-tauri/tauri.conf.json", "package.json"]) {
-      const j = JSON.parse(fs.readFileSync(f, "utf8"));
-      j.version = v;
-      fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");
-    }
-    const cargo = "src-tauri/Cargo.toml";
-    let c = fs.readFileSync(cargo, "utf8");
-    c = c.replace(/^version = ".*"$/m, `version = "${v}"`);
-    fs.writeFileSync(cargo, c);
-  ' "$VERSION"
+if [[ -n "$VERSION_ARG" ]]; then
+  VERSION="$VERSION_ARG"
+  echo "==> Bumping version to $VERSION"
+  "$(dirname "$0")/bump-version.sh" "$VERSION"
+  git add src-tauri/tauri.conf.json package.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+  if git diff --cached --quiet; then
+    echo "==> Version already $VERSION; nothing to commit"
+  else
+    git commit -m "chore(release): v$VERSION"
+  fi
 else
   VERSION="$(read_version)"
 fi
@@ -64,6 +86,25 @@ if [[ ! -f "$KEY_PATH" ]]; then
 fi
 command -v gh >/dev/null || { echo "ERROR: gh CLI not installed" >&2; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "ERROR: gh not authenticated" >&2; exit 1; }
+
+# The tag + build must reflect a committed state, so refuse a dirty tree.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "ERROR: working tree has uncommitted changes; commit or stash first" >&2
+  exit 1
+fi
+
+# Refuse to clobber an existing release tag (local or origin) unless forced.
+TAG_EXISTS=0
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
+  || [[ -n "$(git ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null)" ]]; then
+  TAG_EXISTS=1
+fi
+if [[ "$TAG_EXISTS" == "1" && "$FORCE" != "1" ]]; then
+  echo "ERROR: tag $TAG already exists (local or origin)." >&2
+  echo "       To overwrite this release, re-run with -f:" >&2
+  echo "         ./scripts/release.sh ${VERSION_ARG:+$VERSION_ARG }-f" >&2
+  exit 1
+fi
 
 # --- Build (signs .app with Apple identity + .app.tar.gz with updater key) ---
 export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY_PATH")"
@@ -114,6 +155,23 @@ node -e '
 echo "==> Staged assets:"
 ls -1 "$STAGE"
 
+# --- Tag the released commit + push -----------------------------------------
+COMMIT="$(git rev-parse HEAD)"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+[[ "$BRANCH" == "main" ]] || echo "WARNING: releasing from '$BRANCH', not 'main'"
+
+git push origin "$BRANCH"
+
+if [[ "$TAG_EXISTS" == "1" ]]; then
+  echo "==> Overwriting existing tag $TAG → $COMMIT (-f)"
+  git tag -f -a "$TAG" -m "$TAG" "$COMMIT"
+  git push -f origin "$TAG"
+else
+  echo "==> Tagging $COMMIT as $TAG"
+  git tag -a "$TAG" -m "$TAG" "$COMMIT"
+  git push origin "$TAG"
+fi
+
 # --- Publish ----------------------------------------------------------------
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
   echo "==> Release $TAG exists; uploading/overwriting assets"
@@ -122,6 +180,7 @@ if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
 else
   echo "==> Creating release $TAG"
   gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes "$NOTES" \
+    --target "$COMMIT" \
     "$STAGE/$DMG_ASSET" "$STAGE/$TARGZ_ASSET" "$STAGE/latest.json"
 fi
 
