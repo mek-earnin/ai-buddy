@@ -71,6 +71,86 @@ The bundle is written to `src-tauri/target/aarch64-apple-darwin/release/bundle/`
 
 AIBuddy launches into the menu bar — there is no main window until you press the shortcut or pick **Show AIBuddy** from the tray.
 
+### Code Signing (avoid repeated Keychain prompts)
+
+AIBuddy stores your API key in the macOS Keychain. macOS gates Keychain access by a **partition list** derived from the app's code-signing identity:
+
+- An **ad-hoc / self-signed** identity has no Team ID, so macOS pins access to the binary's `cdhash`. The `cdhash` changes on **every build**, so you get a Keychain password prompt **every time** you reinstall.
+- An **Apple Development** identity carries a stable **Team ID**, so the partition becomes `teamid:<TEAMID>` — the same across all builds. You approve it **once** and never get prompted again on update.
+
+The signing identity is read from the `APPLE_SIGNING_IDENTITY` environment variable (it is intentionally not committed to `tauri.conf.json`, since it is per-developer). `npm run tauri:build` automatically loads it from a git-ignored **`.env.local`** file — copy `.env.local.example` to get started:
+
+```bash
+cp .env.local.example .env.local
+# then edit .env.local and set APPLE_SIGNING_IDENTITY
+```
+
+**1. Create an Apple Development certificate** (free — uses a regular Apple ID, no paid Apple Developer Program needed).
+
+You need [Xcode](https://apps.apple.com/app/xcode/id497799835) installed (the full app, not just Command Line Tools). Then:
+
+1. Open **Xcode**.
+2. In the menu bar: **Xcode → Settings…** (or press **⌘,**).
+3. Click the **Accounts** tab (top of the Settings window).
+4. Click the **`+`** button in the **bottom-left** corner → choose **Apple ID** → **Continue**.
+5. Sign in with your Apple ID (email + password, plus 2FA code if prompted). Your account now appears in the left list, with a **Personal Team** under it.
+6. Select your **Apple ID** in the left list, then click **Manage Certificates…** (bottom-right of the panel).
+7. In the dialog that opens, click the **`+`** button in the **bottom-left** → choose **Apple Development**.
+8. A new row titled **Apple Development** with today's date appears. Click **Done**.
+
+That's it — Xcode generated a private key + certificate and stored both in your **login Keychain**. (Open **Keychain Access → login → My Certificates** if you want to see it: a `Apple Development: your@email (XXXXXXXXXX)` entry with a disclosure triangle hiding a private key.)
+
+**2. Find your identity name** (you'll paste this into `.env.local`):
+
+```bash
+security find-identity -p codesigning -v
+```
+
+Look for the line like:
+
+```
+1) ABCD1234... "Apple Development: you@example.com (XXXXXXXXXX)"
+```
+
+The quoted string is your `APPLE_SIGNING_IDENTITY`.
+
+> Note: the `(XXXXXXXXXX)` shown inside the name is **not** necessarily your Team ID (for personal teams they differ). Get the real Team ID — needed in step 4 — from the signed app after step 3:
+>
+> ```bash
+> codesign -d -vvv "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/AI Buddy.app" 2>&1 | grep TeamIdentifier
+> # TeamIdentifier=XXXXXXXXXX
+> ```
+
+> **If `find-identity` shows `0 valid identities` or `CSSMERR_TP_NOT_TRUSTED`, or a build later fails with `unable to build chain to self-signed root`:** your Mac is missing the Apple **WWDR G3** intermediate certificate that links your cert to Apple's root. Install it, then re-run the command above:
+>
+> ```bash
+> curl -fsSLO https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+> security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db
+> ```
+
+**3. Put the identity in `.env.local` and build:**
+
+```bash
+cp .env.local.example .env.local
+# edit .env.local:
+#   APPLE_SIGNING_IDENTITY="Apple Development: you@example.com (XXXXXXXXXX)"
+npm run tauri:build
+```
+
+(If `.env.local` is absent, the build still runs but produces an ad-hoc signature — fine for local dev, but you'll get the repeated Keychain prompts described above.)
+
+**4. One-time Keychain approval.** Launch the newly built app and approve the Keychain prompt once (**Always Allow**). If you previously ran an ad-hoc build, the existing Keychain item may still be pinned to the old `cdhash`; repoint it to your Team ID once (use the `TeamIdentifier` from step 2's note, then run):
+
+```bash
+security set-generic-password-partition-list \
+  -s com.mek-earnin.aibuddy -a omlxApiKey \
+  -S "teamid:<YOUR_TEAM_ID>" \
+  ~/Library/Keychains/login.keychain-db
+# enter your macOS login password at the prompt
+```
+
+After this, rebuilding and reinstalling never re-prompts for the Keychain.
+
 ### Configuration
 
 On first launch, click the tray icon → Settings to configure:

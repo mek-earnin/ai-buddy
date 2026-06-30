@@ -4,6 +4,8 @@ release/
 *.log
 .DS_Store
 .env
+.env*.local
+!.env.local.example
 .playwright-cli/
 
 # Local dev secrets (debug builds store tokens here instead of Keychain).

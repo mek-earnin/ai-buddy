@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AI Buddy",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "identifier": "com.mek-earnin.aibuddy",
   "build": {
     "frontendDist": "../dist",
@@ -43,8 +43,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "10.15",
-      "signingIdentity": "AIBuddy Code Signing"
+      "minimumSystemVersion": "10.15"
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"

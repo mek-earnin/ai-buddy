@@ -1,6 +1,6 @@
 {
   "name": "ai-buddy",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Developer productivity tray app — text rephrase, call handoff generation, standup notes, and more",
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build --target aarch64-apple-darwin"
+    "tauri:build": "set -a; [ -f .env.local ] && . ./.env.local; set +a; tauri build --target aarch64-apple-darwin"
   },
   "keywords": [
     "developer",
