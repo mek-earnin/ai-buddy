@@ -147,22 +147,24 @@ button {
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* Tight gap binds the logo to the "AI Buddy" wordmark as one unit. */
+  gap: 5px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
 }
 
-.brand-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent-line);
+.brand-logo {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--text);
 }
 
 .brand-version {
+  /* Version is secondary metadata — wider gap separates it from the wordmark. */
+  margin-left: 4px;
   font-size: 11px;
   font-weight: 500;
   color: var(--text-faint);

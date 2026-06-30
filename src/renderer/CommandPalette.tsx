@@ -523,7 +523,26 @@ export default function CommandPalette({
     <div className="surface">
       <div className="topbar drag" data-tauri-drag-region>
         <span className="brand">
-          <span className="brand-dot" /> AI Buddy
+          <svg
+            className="brand-logo"
+            viewBox="246 246 532 532"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <circle
+              cx="512"
+              cy="512"
+              r="210"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="92"
+              strokeLinecap="round"
+              strokeDasharray="989.6 329.9"
+            />
+            <circle cx="512" cy="512" r="96" fill="currentColor" />
+            <circle cx="664" cy="360" r="80" fill="currentColor" />
+          </svg>
+          AI Buddy
           {appVersion && <span className="brand-version">v{appVersion}</span>}
         </span>
         {update?.available && update.version && (
