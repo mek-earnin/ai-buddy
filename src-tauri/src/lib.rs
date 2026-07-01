@@ -266,6 +266,29 @@ fn position_and_show(window: &tauri::WebviewWindow, position: Option<(f64, f64)>
     #[cfg(target_os = "macos")]
     activate_app();
     let _ = window.set_focus();
+
+    // First-open focus race (macOS Accessory apps): the very first
+    // `activateIgnoringOtherApps:` after launch is applied on the *next* runloop
+    // turn, so the same-turn `set_focus()` above orders the window in front
+    // without making it key — the window appears but keystrokes still go to the
+    // previously frontmost app until the user closes and reopens it. Re-assert
+    // activation + focus on a later runloop turn to win that race. It's a no-op
+    // on every subsequent open, and the visibility guard keeps it from
+    // resurrecting a window the user dismissed within the delay.
+    #[cfg(target_os = "macos")]
+    {
+        let win = window.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            let refocus = win.clone();
+            let _ = win.run_on_main_thread(move || {
+                if refocus.is_visible().unwrap_or(false) {
+                    activate_app();
+                    let _ = refocus.set_focus();
+                }
+            });
+        });
+    }
 }
 
 /// Position the main window near the cursor, show and focus it, then ask the
