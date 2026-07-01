@@ -172,14 +172,36 @@ else
   git push origin "$TAG"
 fi
 
+# --- Build release notes from the git log -----------------------------------
+# GitHub's auto-generated notes (`--generate-notes`) only list merged PRs. We
+# commit straight to the branch, so reproduce GitHub's default template from the
+# commits since the previous tag instead:
+#
+#   ## What's Changed
+#   * <commit-message>
+#
+#   **Full Changelog**: https://github.com/<repo>/compare/<prev>...<current>
+PREV_TAG="$(git tag --list 'v*' --sort=-v:refname | grep -vx "$TAG" | head -n1 || true)"
+if [[ -n "$PREV_TAG" ]]; then
+  COMMIT_LOG="$(git log "$PREV_TAG..$COMMIT" --no-merges --pretty=format:'* %s')"
+  COMPARE_URL="https://github.com/$REPO/compare/$PREV_TAG...$TAG"
+else
+  COMMIT_LOG="$(git log "$COMMIT" --no-merges --pretty=format:'* %s')"
+  COMPARE_URL=""
+fi
+
+RELEASE_BODY="## What's Changed"$'\n'"$COMMIT_LOG"
+[[ -n "$COMPARE_URL" ]] && RELEASE_BODY+=$'\n\n**Full Changelog**: '"$COMPARE_URL"
+
 # --- Publish ----------------------------------------------------------------
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-  echo "==> Release $TAG exists; uploading/overwriting assets"
+  echo "==> Release $TAG exists; uploading/overwriting assets + notes"
   gh release upload "$TAG" --repo "$REPO" --clobber \
     "$STAGE/$DMG_ASSET" "$STAGE/$TARGZ_ASSET" "$STAGE/latest.json"
+  gh release edit "$TAG" --repo "$REPO" --notes "$RELEASE_BODY"
 else
   echo "==> Creating release $TAG"
-  gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes "$NOTES" \
+  gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes "$RELEASE_BODY" \
     --target "$COMMIT" \
     "$STAGE/$DMG_ASSET" "$STAGE/$TARGZ_ASSET" "$STAGE/latest.json"
 fi
