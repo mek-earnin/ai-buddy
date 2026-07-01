@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AI Buddy",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "identifier": "com.mek-earnin.aibuddy",
   "build": {
     "frontendDist": "../dist",
