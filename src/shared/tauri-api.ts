@@ -154,3 +154,9 @@ listen<{ text: string; editable: boolean }>('selected-text', (e) => {
 listen('show-settings', () => {
   window.postMessage({ type: 'show-settings' }, '*');
 });
+
+// Rust refreshes the update status in the background (periodic + throttled
+// per-open check); forward each snapshot so the badge updates live.
+listen<UpdateStatus>('update-status', (e) => {
+  window.postMessage({ channel: 'update-status', status: e.payload }, '*');
+});

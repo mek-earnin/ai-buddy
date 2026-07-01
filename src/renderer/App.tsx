@@ -36,6 +36,9 @@ export default function App() {
         setView('palette');
         setShowNonce((n) => n + 1);
       }
+      if (event.data?.channel === 'update-status') {
+        setUpdate(event.data.status);
+      }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);

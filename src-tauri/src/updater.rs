@@ -9,15 +9,47 @@
 //! the `.app`'s Apple signature, while the updater trusts the minisign
 //! signature. Both must be produced at build time (see `scripts/release.sh`).
 
-use tauri::AppHandle;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::settings;
 
+/// Minimum gap between network update checks. Frequent triggers (every window
+/// show) within this window reuse the cached status instead of hitting GitHub.
+const MIN_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
+/// How often the background loop re-checks so long-running sessions still
+/// surface new versions without a restart.
+const PERIODIC_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// Event name the frontend listens on to refresh the "update available" badge.
+const UPDATE_STATUS_EVENT: &str = "update-status";
+
+/// Shared, throttled update-check state. Caches the last known status and the
+/// time of the last network check so we can serve the badge cheaply and avoid
+/// hammering the update endpoint when the palette is opened repeatedly.
+#[derive(Default)]
+pub struct UpdateState {
+    inner: Mutex<UpdateStateInner>,
+}
+
+#[derive(Default)]
+struct UpdateStateInner {
+    /// When the last network check completed (success or error).
+    last_check: Option<Instant>,
+    /// Last successful status, reused while still fresh.
+    cached: Option<UpdateStatus>,
+    /// A background check is currently running — dedupes concurrent triggers.
+    in_flight: bool,
+}
+
 /// Update availability snapshot for the UI badge (camelCase to match the
 /// frontend convention used by the other commands).
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateStatus {
     /// The currently installed version (e.g. "2.1.1").
@@ -38,27 +70,115 @@ pub fn app_version(app: AppHandle) -> String {
 
 /// Silently check the update endpoint and report whether a newer version
 /// exists. Backs the passive "update available" badge — never shows a dialog.
-/// Errors (e.g. no published manifest yet in dev) surface to the caller, which
-/// simply hides the badge.
+///
+/// Returns the cached status when the last check is still fresh (within
+/// `MIN_CHECK_INTERVAL`) so the initial mount and any manual refresh don't
+/// re-hit the network needlessly. Errors (e.g. no published manifest yet in
+/// dev) surface to the caller, which simply hides the badge.
 #[tauri::command]
 pub async fn fetch_update_status(app: AppHandle) -> Result<UpdateStatus, String> {
-    let current_version = app.package_info().version.to_string();
-    let updater = app.updater().map_err(|e| e.to_string())?;
-    match updater.check().await {
-        Ok(Some(update)) => Ok(UpdateStatus {
-            current_version,
-            available: true,
-            version: Some(update.version.clone()),
-            notes: update.body.clone(),
-        }),
-        Ok(None) => Ok(UpdateStatus {
-            current_version,
-            available: false,
-            version: None,
-            notes: None,
-        }),
-        Err(e) => Err(e.to_string()),
+    if let Some(state) = app.try_state::<UpdateState>() {
+        if let Ok(guard) = state.inner.lock() {
+            if let (Some(last), Some(cached)) = (guard.last_check, guard.cached.as_ref()) {
+                if last.elapsed() < MIN_CHECK_INTERVAL {
+                    return Ok(cached.clone());
+                }
+            }
+        }
     }
+    check_and_cache(&app).await
+}
+
+/// Run the network check, update the shared cache, emit `update-status` for the
+/// badge, and return the fresh status. `last_check` is stamped on both success
+/// and error so a persistently failing endpoint (e.g. dev with no manifest)
+/// still throttles rather than retrying on every trigger.
+async fn check_and_cache(app: &AppHandle) -> Result<UpdateStatus, String> {
+    let current_version = app.package_info().version.to_string();
+    let result: Result<UpdateStatus, String> = match app.updater() {
+        Ok(updater) => match updater.check().await {
+            Ok(Some(update)) => Ok(UpdateStatus {
+                current_version,
+                available: true,
+                version: Some(update.version.clone()),
+                notes: update.body.clone(),
+            }),
+            Ok(None) => Ok(UpdateStatus {
+                current_version,
+                available: false,
+                version: None,
+                notes: None,
+            }),
+            Err(e) => Err(e.to_string()),
+        },
+        Err(e) => Err(e.to_string()),
+    };
+
+    if let Some(state) = app.try_state::<UpdateState>() {
+        if let Ok(mut guard) = state.inner.lock() {
+            guard.last_check = Some(Instant::now());
+            if let Ok(status) = &result {
+                guard.cached = Some(status.clone());
+            }
+        }
+    }
+
+    if let Ok(status) = &result {
+        let _ = app.emit(UPDATE_STATUS_EVENT, status.clone());
+    }
+
+    result
+}
+
+/// Trigger a background update check if the cached status is stale, refreshing
+/// the badge via the `update-status` event. Cheap no-op when a recent check
+/// exists or one is already running, so it's safe to call on every window show
+/// without flooding the endpoint.
+pub fn maybe_refresh_update_status(app: &AppHandle) {
+    let should_check = {
+        let Some(state) = app.try_state::<UpdateState>() else {
+            return;
+        };
+        let Ok(mut guard) = state.inner.lock() else {
+            return;
+        };
+        let fresh = guard
+            .last_check
+            .is_some_and(|t| t.elapsed() < MIN_CHECK_INTERVAL);
+        if fresh || guard.in_flight {
+            false
+        } else {
+            guard.in_flight = true;
+            true
+        }
+    };
+    if !should_check {
+        return;
+    }
+
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = check_and_cache(&app).await;
+        if let Some(state) = app.try_state::<UpdateState>() {
+            if let Ok(mut guard) = state.inner.lock() {
+                guard.in_flight = false;
+            }
+        }
+    });
+}
+
+/// Spawn a background loop that silently refreshes the update status every
+/// `PERIODIC_INTERVAL`. Uses a parked OS thread (not a runtime timer) so it
+/// needs no extra dependency; the actual check runs on the Tauri async runtime.
+pub fn spawn_periodic_check(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(PERIODIC_INTERVAL);
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = check_and_cache(&app).await;
+        });
+    });
 }
 
 /// Start the interactive update flow (confirm dialog → download → relaunch).

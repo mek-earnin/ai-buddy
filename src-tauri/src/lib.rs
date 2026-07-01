@@ -259,6 +259,10 @@ fn position_and_show(window: &tauri::WebviewWindow, position: Option<(f64, f64)>
 
     if !already_visible {
         let _ = window.show();
+        // A hidden→visible transition is a cheap, natural moment to refresh the
+        // update badge. Throttled internally, so frequent opens don't hit the
+        // network — long-running sessions still catch new versions on next open.
+        updater::maybe_refresh_update_status(window.app_handle());
     }
     // Activate before focusing: as an Accessory app we're not frontmost when
     // triggered from the menu bar or a global shortcut, and a bare set_focus()
@@ -402,6 +406,7 @@ pub fn run() {
             app.manage(Mutex::new(loaded));
             app.manage(PrevApp(Mutex::new(String::new())));
             app.manage(RegisteredShortcut(Mutex::new(None)));
+            app.manage(updater::UpdateState::default());
 
             // Hide from the Dock; live only in the menu bar.
             let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -469,6 +474,10 @@ pub fn run() {
             if let Err(e) = apply_shortcut(&handle, &shortcut_accel) {
                 settings::log(&handle, &format!("failed to register global shortcut: {e}"));
             }
+
+            // Keep the badge fresh during long-running sessions (menu-bar app
+            // often stays open for days), on top of the throttled per-open check.
+            updater::spawn_periodic_check(&handle);
 
             Ok(())
         })
