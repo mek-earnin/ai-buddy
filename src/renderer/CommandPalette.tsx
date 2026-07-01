@@ -25,6 +25,12 @@ type View = 'list' | 'ask' | 'running' | 'result';
 const RECENT_KEY = 'aibuddy:recent-actions';
 const MAX_RECENT = 3;
 
+// The window opens at the cursor, so the mouse already sits over a row when the
+// palette appears. Ignore pointer movement smaller than this (in px) right after
+// open so a stray nudge can't steal the highlight from the first (most recent)
+// item before the user deliberately moves the mouse.
+const MOUSE_ACTIVATE_PX = 6;
+
 function loadRecent(): string[] {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
@@ -75,6 +81,13 @@ export default function CommandPalette({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const askRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // The cursor is hidden when the palette opens (the window spawns at the pointer,
+  // so it sits over a row) and stays hidden during keyboard nav. A deliberate
+  // mouse move reveals it and re-enables hover-to-highlight. pointerOriginRef
+  // tracks where movement started so a stray nudge doesn't count. All reset on
+  // remount (key={showNonce}).
+  const pointerOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const [mouseActive, setMouseActive] = useState(false);
 
   const mod = isMacPlatform() ? '\u2318' : 'Ctrl';
 
@@ -126,6 +139,26 @@ export default function CommandPalette({
     const el = document.getElementById(`cmd-item-${highlight}`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [highlight]);
+
+  // Reveal the (initially hidden) cursor once the user makes a deliberate mouse
+  // move, which also re-enables hover-to-highlight. Tracked at the document level
+  // so it works regardless of where the pointer rests when the palette opens.
+  useEffect(() => {
+    if (view !== 'list') return;
+    const onMove = (e: MouseEvent) => {
+      const origin = pointerOriginRef.current;
+      if (!origin) {
+        pointerOriginRef.current = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      const dx = e.clientX - origin.x;
+      const dy = e.clientY - origin.y;
+      if (dx * dx + dy * dy < MOUSE_ACTIVATE_PX * MOUSE_ACTIVATE_PX) return;
+      setMouseActive(true);
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [view]);
 
   const run = useCallback(
     async (action: Action, opts?: { question?: string }) => {
@@ -310,9 +343,13 @@ export default function CommandPalette({
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        pointerOriginRef.current = null;
+        setMouseActive(false);
         setHighlight((h) => Math.min(h + 1, Math.max(navList.length - 1, 0)));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        pointerOriginRef.current = null;
+        setMouseActive(false);
         setHighlight((h) => Math.max(h - 1, 0));
       } else if (e.key === 'Enter') {
         e.preventDefault();
@@ -496,7 +533,9 @@ export default function CommandPalette({
         id={`cmd-item-${index}`}
         className={`cmd-row ${isActive ? 'active' : ''}`}
         onClick={() => run(action)}
-        onMouseMove={() => setHighlight(index)}
+        onMouseMove={() => {
+          if (mouseActive) setHighlight(index);
+        }}
         role="option"
         aria-selected={isActive}
       >
@@ -520,7 +559,7 @@ export default function CommandPalette({
   };
 
   return (
-    <div className="surface">
+    <div className={`surface${mouseActive ? '' : ' cursor-hidden'}`}>
       <div className="topbar drag" data-tauri-drag-region>
         <span className="brand">
           <svg

@@ -116,6 +116,14 @@ button {
   background: var(--surface);
 }
 
+/* Hide the OS cursor until the user deliberately moves the mouse, so it can't
+   sit on a random row when the palette opens at the pointer. Covers children
+   that set their own cursor (buttons, inputs). */
+.surface.cursor-hidden,
+.surface.cursor-hidden * {
+  cursor: none !important;
+}
+
 /* ---------- Top bar ---------- */
 .topbar {
   display: flex;
