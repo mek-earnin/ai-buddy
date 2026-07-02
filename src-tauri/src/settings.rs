@@ -11,8 +11,13 @@ use tauri::{AppHandle, Manager};
 pub const KEYRING_SERVICE: &str = "com.mek-earnin.aibuddy";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+// `default` lets older settings.json files (missing the newer tone keys) still
+// deserialize: absent fields fall back to TonePrompts::default() instead of
+// failing the whole parse and wiping all settings on upgrade.
+#[serde(rename_all = "camelCase", default)]
 pub struct TonePrompts {
+    pub grammar: String,
+    pub natural: String,
     pub professional: String,
     pub friendly: String,
     pub direct: String,
@@ -21,6 +26,8 @@ pub struct TonePrompts {
 impl Default for TonePrompts {
     fn default() -> Self {
         Self {
+            grammar: String::new(),
+            natural: String::new(),
             professional: String::new(),
             friendly: String::new(),
             direct: String::new(),

@@ -40,9 +40,9 @@ const REPHRASE_ACTIONS: Action[] = TONES.map((tone) => ({
   id: `rephrase:${tone.id}`,
   group: 'Rephrase',
   label: tone.label,
-  description: `Rewrite the selected text in a ${tone.label.toLowerCase()} tone`,
+  description: tone.description ?? `Rewrite the selected text in a ${tone.label.toLowerCase()} tone`,
   icon: tone.emoji,
-  keywords: ['rephrase', 'rewrite', 'tone', 'reword', tone.id, tone.label],
+  keywords: ['rephrase', 'rewrite', 'tone', 'reword', tone.id, tone.label, ...(tone.keywords ?? [])],
   requiresSelection: true,
   buildRequest: async ({ input, settings }) => ({
     toolId: 'rephrase',

@@ -12,29 +12,51 @@ export interface ToneDefinition {
   label: string;
   emoji: string;
   shortcut: string;
+  /** Optional palette description; falls back to a generated "…tone" line. */
+  description?: string;
+  /** Optional extra fuzzy-search synonyms. */
+  keywords?: string[];
   defaultPrompt: string;
 }
 
 export const TONES: ToneDefinition[] = [
   {
+    id: 'grammar',
+    label: 'Fix Grammar',
+    emoji: '✏️',
+    shortcut: '1',
+    description: 'Fix grammar, spelling & punctuation only — keep everything else',
+    keywords: ['grammar', 'spelling', 'punctuation', 'typo', 'correct', 'proofread', 'fix'],
+    defaultPrompt: `${BASE_INSTRUCTION}\n\nTask: Fix grammar only. Correct grammar, spelling, and punctuation mistakes. Keep the exact same wording, sentence structure, tone, and formatting — do not rephrase, reorder, or improve style. Change only what is grammatically incorrect. If the text is already correct, return it unchanged.`,
+  },
+  {
+    id: 'natural',
+    label: 'Natural',
+    emoji: '🗣️',
+    shortcut: '2',
+    description: 'Sound like a native American English speaker; keep tone & details',
+    keywords: ['natural', 'native', 'american', 'fluent', 'idiomatic', 'smooth', 'localize'],
+    defaultPrompt: `${BASE_INSTRUCTION}\n\nTask: Make it sound natural. Rewrite so it reads as if written by a native American English speaker — smooth, idiomatic phrasing. Preserve the original tone and every detail; do not add or remove information. Fix only awkward or non-native phrasing while keeping the author's voice.`,
+  },
+  {
     id: 'professional',
     label: 'Professional',
     emoji: '💼',
-    shortcut: '1',
+    shortcut: '3',
     defaultPrompt: `${BASE_INSTRUCTION}\n\nTone: Professional and business-appropriate. Use clear, polished language suitable for workplace communication. Avoid slang, excessive informality, or overly casual phrasing.`,
   },
   {
     id: 'friendly',
     label: 'Friendly',
     emoji: '😊',
-    shortcut: '2',
+    shortcut: '4',
     defaultPrompt: `${BASE_INSTRUCTION}\n\nTone: Warm, friendly, and approachable. Use conversational language that feels personable and welcoming. It's okay to use light humor or enthusiasm where natural.`,
   },
   {
     id: 'direct',
     label: 'Direct',
     emoji: '🎯',
-    shortcut: '3',
+    shortcut: '5',
     defaultPrompt: `${BASE_INSTRUCTION}\n\nTone: Concise and direct. Remove hedging language, filler words, and unnecessary qualifiers. Get straight to the point while remaining respectful.`,
   },
 ];

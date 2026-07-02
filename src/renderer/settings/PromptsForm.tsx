@@ -16,24 +16,18 @@ interface PromptsFormProps {
 
 const PROMPT_PLACEHOLDER = 'Enter your custom prompt…';
 
-const toneDefaultPrompt = (id: ToneId): string =>
-  TONES.find((t) => t.id === id)?.defaultPrompt ?? '';
-
 /**
  * Replace empty prompt fields with their defaults so each textarea shows the
  * actual prompt that will be used, ready for the user to edit or replace.
  */
 function prefillDefaults(s: PromptsSettings): PromptsSettings {
+  const tonePrompts = {} as TonePrompts;
+  for (const tone of TONES) {
+    const current = s.tonePrompts[tone.id];
+    tonePrompts[tone.id] = current && current.trim() ? current : tone.defaultPrompt;
+  }
   return {
-    tonePrompts: {
-      professional: s.tonePrompts.professional.trim()
-        ? s.tonePrompts.professional
-        : toneDefaultPrompt('professional'),
-      friendly: s.tonePrompts.friendly.trim()
-        ? s.tonePrompts.friendly
-        : toneDefaultPrompt('friendly'),
-      direct: s.tonePrompts.direct.trim() ? s.tonePrompts.direct : toneDefaultPrompt('direct'),
-    },
+    tonePrompts,
     promptRefinerPrompt: s.promptRefinerPrompt.trim()
       ? s.promptRefinerPrompt
       : DEFAULT_PROMPT_REFINER_PROMPT,
@@ -49,12 +43,12 @@ const collapseToDefault = (value: string, def: string): string =>
   value.trim() === '' || value.trim() === def.trim() ? '' : value;
 
 function normalizeForSave(s: PromptsSettings): PromptsSettings {
+  const tonePrompts = {} as TonePrompts;
+  for (const tone of TONES) {
+    tonePrompts[tone.id] = collapseToDefault(s.tonePrompts[tone.id] ?? '', tone.defaultPrompt);
+  }
   return {
-    tonePrompts: {
-      professional: collapseToDefault(s.tonePrompts.professional, toneDefaultPrompt('professional')),
-      friendly: collapseToDefault(s.tonePrompts.friendly, toneDefaultPrompt('friendly')),
-      direct: collapseToDefault(s.tonePrompts.direct, toneDefaultPrompt('direct')),
-    },
+    tonePrompts,
     promptRefinerPrompt: collapseToDefault(s.promptRefinerPrompt, DEFAULT_PROMPT_REFINER_PROMPT),
   };
 }

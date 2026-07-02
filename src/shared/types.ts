@@ -1,6 +1,6 @@
 export type AIProvider = 'omlx' | 'ollama' | 'openai' | 'local-cli' | 'custom';
 
-export type ToneId = 'professional' | 'friendly' | 'direct';
+export type ToneId = 'grammar' | 'natural' | 'professional' | 'friendly' | 'direct';
 
 export type ToolId =
   | 'rephrase'
@@ -12,6 +12,8 @@ export type ToolId =
   | 'ask';
 
 export interface TonePrompts {
+  grammar: string;
+  natural: string;
   professional: string;
   friendly: string;
   direct: string;
@@ -136,6 +138,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   globalShortcut: 'Ctrl+Shift+Space',
   autoPaste: false,
   tonePrompts: {
+    grammar: '',
+    natural: '',
     professional: '',
     friendly: '',
     direct: '',

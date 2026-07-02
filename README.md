@@ -20,6 +20,8 @@ Actions are organized into three groups. In the palette, the first few are reach
 
 Rewrites your selected text while preserving its meaning and original language.
 
+- **Fix Grammar** — corrects grammar, spelling, and punctuation only; keeps your exact wording, structure, and tone.
+- **Natural** — rephrases so it reads like a native American English speaker, while keeping the original tone and every detail.
 - **Professional** — polished, business-appropriate wording; drops slang and casual phrasing.
 - **Friendly** — warm, conversational, and approachable tone.
 - **Direct** — concise and to the point; strips hedging and filler.
