@@ -97,37 +97,63 @@ async fn check_and_cache(app: &AppHandle) -> Result<UpdateStatus, String> {
     let current_version = app.package_info().version.to_string();
     let result: Result<UpdateStatus, String> = match app.updater() {
         Ok(updater) => match updater.check().await {
-            Ok(Some(update)) => Ok(UpdateStatus {
-                current_version,
-                available: true,
-                version: Some(update.version.clone()),
-                notes: update.body.clone(),
-            }),
-            Ok(None) => Ok(UpdateStatus {
-                current_version,
-                available: false,
-                version: None,
-                notes: None,
-            }),
+            Ok(maybe) => Ok(status_from_check(current_version, maybe.as_ref())),
             Err(e) => Err(e.to_string()),
         },
         Err(e) => Err(e.to_string()),
     };
 
-    if let Some(state) = app.try_state::<UpdateState>() {
-        if let Ok(mut guard) = state.inner.lock() {
-            guard.last_check = Some(Instant::now());
-            if let Ok(status) = &result {
-                guard.cached = Some(status.clone());
-            }
-        }
-    }
-
-    if let Ok(status) = &result {
-        let _ = app.emit(UPDATE_STATUS_EVENT, status.clone());
+    match &result {
+        Ok(status) => record_status(app, status),
+        // Stamp the check time even on failure so a persistently failing
+        // endpoint (e.g. dev with no manifest) still throttles rather than
+        // retrying on every trigger.
+        Err(_) => stamp_check(app),
     }
 
     result
+}
+
+/// Build the badge snapshot from a completed updater check.
+fn status_from_check(current_version: String, update: Option<&Update>) -> UpdateStatus {
+    match update {
+        Some(update) => UpdateStatus {
+            current_version,
+            available: true,
+            version: Some(update.version.clone()),
+            notes: update.body.clone(),
+        },
+        None => UpdateStatus {
+            current_version,
+            available: false,
+            version: None,
+            notes: None,
+        },
+    }
+}
+
+/// Record a completed status into the shared cache (stamping the check time)
+/// and emit `update-status` for the badge. Shared by the passive badge refresh
+/// and the interactive "Check for Updates…" flow so a manually discovered
+/// version seeds the badge instead of being thrown away.
+fn record_status(app: &AppHandle, status: &UpdateStatus) {
+    if let Some(state) = app.try_state::<UpdateState>() {
+        if let Ok(mut guard) = state.inner.lock() {
+            guard.last_check = Some(Instant::now());
+            guard.cached = Some(status.clone());
+        }
+    }
+    let _ = app.emit(UPDATE_STATUS_EVENT, status.clone());
+}
+
+/// Stamp only the last-check time (no cache/emit), so a failed check still
+/// throttles subsequent triggers.
+fn stamp_check(app: &AppHandle) {
+    if let Some(state) = app.try_state::<UpdateState>() {
+        if let Ok(mut guard) = state.inner.lock() {
+            guard.last_check = Some(Instant::now());
+        }
+    }
 }
 
 /// Trigger a background update check if the cached status is stale, refreshing
@@ -206,13 +232,24 @@ pub fn check_for_updates(app: &AppHandle, silent: bool) {
         };
 
         match updater.check().await {
-            Ok(Some(update)) => prompt_and_install(&app, update),
-            Ok(None) => {
-                if !silent {
-                    app.dialog()
-                        .message("You're already on the latest version.")
-                        .title("AI Buddy")
-                        .show(|_| {});
+            Ok(maybe) => {
+                // Seed the shared cache + badge so a manually discovered version
+                // shows up (or clears) even though this path renders its own
+                // dialog rather than the passive badge flow.
+                let status =
+                    status_from_check(app.package_info().version.to_string(), maybe.as_ref());
+                record_status(&app, &status);
+
+                match maybe {
+                    Some(update) => prompt_and_install(&app, update),
+                    None => {
+                        if !silent {
+                            app.dialog()
+                                .message("You're already on the latest version.")
+                                .title("AI Buddy")
+                                .show(|_| {});
+                        }
+                    }
                 }
             }
             Err(e) => report_error(&app, silent, &format!("update check failed: {e}")),
